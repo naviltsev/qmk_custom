@@ -1,5 +1,9 @@
 #pragma once
 
+#undef DEBOUNCE
+#define DEBOUNCE 15
+
+// Default RGB effect - solid color
 #undef RGB_MATRIX_DEFAULT_MODE
 #define RGB_MATRIX_DEFAULT_MODE RGB_MATRIX_SOLID_COLOR
 

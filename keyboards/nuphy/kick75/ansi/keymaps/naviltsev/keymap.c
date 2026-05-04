@@ -61,6 +61,11 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     return true;
 }
 
+void keyboard_post_init_user(void) {
+    // Default RGB hue/sat/val - white, 1/4th brightness
+    rgb_matrix_sethsv_noeeprom(0, 0, 64);
+}
+
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
 // layer Mac

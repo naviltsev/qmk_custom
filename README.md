@@ -1,5 +1,9 @@
 # NuPhy Kick75 — custom keymap
 
+## General
+
+- Debounce: 15ms (default is 0ms) — should fix double-typing issue (?)
+
 ## Keymap
 
 ### Mac layer
@@ -17,9 +21,11 @@
 
 ## RGB
 
+Default color: white (HSV 0, 0, 64 — 1/4 brightness), set via `keyboard_post_init_user()`. After an EEPROM reset the board reverts to red — reboot (turn off then on) to restore white.
+
 Active effects (all others disabled):
 
-1. **RGB_MATRIX_SOLID_COLOR**
+1. **RGB_MATRIX_SOLID_COLOR** (the default one after EEPROM reset / reboot)
 2. **RGB_MATRIX_TYPING_HEATMAP**
 3. **RGB_MATRIX_SOLID_REACTIVE_SIMPLE**
 4. **RGB_MATRIX_CUSTOM_deus_ex** — black background with themed key colors:
