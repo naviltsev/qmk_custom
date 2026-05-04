@@ -2,7 +2,18 @@
 
 ## Keymap
 
-- F1–F12 are functional keys on layer 0 (Mac, no FN required); multimedia controls (brightness, playback, etc.) moved to layer 1 (Mac, FN held)
+### Mac layer
+- F1–F12 are functional keys, no FN required;
+- multimedia controls (of F1-F12 keys - brightness, playback, etc.) require FN held;
+
+### Windows layer macros (layer 2, no FN)
+
+| Combo | Output | Description |
+|---|---|---|
+| Ctrl+Alt+Right | End | |
+| Ctrl+Alt+Left | Home | |
+| Ctrl+Alt+[ | Ctrl+Shift+Tab | Previous tab in VSCode, browser, terminal, etc. |
+| Ctrl+Alt+] | Ctrl+Tab | Next tab in VSCode, browser, terminal, etc. |
 
 ## RGB
 
