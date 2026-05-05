@@ -6,6 +6,9 @@
 
 ## Keymap
 
+### All layers
+- remapped DEL/HOME/PGUP/PGDN to PGUP/PGDN/HOME/DEL;
+
 ### Mac layer
 - F1–F12 are functional keys, no FN required;
 - multimedia controls (of F1-F12 keys - brightness, playback, etc.) require FN held;
