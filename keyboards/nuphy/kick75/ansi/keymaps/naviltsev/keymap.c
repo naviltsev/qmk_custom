@@ -74,7 +74,7 @@ void keyboard_post_init_user(void) {
 // RF protocol (dev_info.rf_baterry), bypassing the standard QMK battery feature entirely
 bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
     uint8_t level = dev_info.rf_baterry;
-    battery_indicator_simple(level, led_min, led_max);
+    battery_indicator_fkeys(level, led_min, led_max);
     return false;
 }
 

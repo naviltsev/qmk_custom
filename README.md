@@ -19,6 +19,14 @@
 | Ctrl+Alt+[ | Ctrl+Shift+Tab | Previous tab in VSCode, browser, terminal, etc. |
 | Ctrl+Alt+] | Ctrl+Tab | Next tab in VSCode, browser, terminal, etc. |
 
+## Battery indicator
+
+Three effects are available, controlled via `rgb_matrix_indicators_advanced_user()` in `keymap.c`:
+
+1. **battery_indicator_simple** — ESC key shows green (>=30%), orange (>=10%), or red (<10%)
+2. **battery_indicator_fkeys** — F1-F12 as a progress bar, green keys lit proportionally to battery level
+3. **battery_indicator_rainbow** — ESC key shows one of 7 colors mapped across 0-100%
+
 ## RGB
 
 Default color: white (HSV 0, 0, 64 — 1/4 brightness), set via `keyboard_post_init_user()`. After an EEPROM reset the board reverts to red — reboot (turn off then on) to restore white.
