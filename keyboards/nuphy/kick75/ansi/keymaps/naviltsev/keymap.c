@@ -17,6 +17,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include QMK_KEYBOARD_H
 
+extern DEV_INFO_STRUCT dev_info;
+
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     if (!record->event.pressed) return true;
 
@@ -64,6 +66,32 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 void keyboard_post_init_user(void) {
     // Default RGB hue/sat/val - white, 1/4th brightness
     rgb_matrix_sethsv_noeeprom(0, 0, 64);
+}
+
+// battery_percent_changed_user documented here https://docs.qmk.fm/features/battery
+// is never called on kick75 it looks like - it manages battery via its own
+// RF protocol (dev_info.rf_baterry), bypassing the standard QMK battery feature entirely
+bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
+    uint8_t esc_led = g_led_config.matrix_co[0][0];
+
+    // This callback is invoked in batches - skip if ESC's LED isn't in this batch
+    if (esc_led < led_min || esc_led >= led_max) return false;
+
+    uint8_t level = dev_info.rf_baterry;
+
+    // The following is likely Kick75 specific,
+    // LED driver is GRB, so R and G channels are swapped
+    RGB color;
+    if (level >= 30) {
+        color = (RGB){255, 0, 0};   // green (GRB)
+    } else if (level >= 10) {
+        color = (RGB){140, 255, 0}; // orange (GRB)
+    } else {
+        color = (RGB){0, 255, 0};   // red (GRB)
+    }
+
+    rgb_matrix_set_color(esc_led, color.r, color.g, color.b);
+    return false;
 }
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
