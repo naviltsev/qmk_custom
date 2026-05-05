@@ -8,11 +8,19 @@
 // treats 1st field as G, 2nd as R, and 3rd as B
 // when constructing color through RGB type/struct and then passing color
 // components to eg. rgb_matrix_set_color().
-// So rgb_matrix_set_color(led, color.r, color.g, color.b) - 
+// So rgb_matrix_set_color(led, color.r, color.g, color.b) -
 // it's where the R and G swapping happens on Kick75.
 // If you pass values directly, eg. rgb_matrix_set_color(led, 255, 0, 0) - it's ok,
 // the color will be red.
 //
+
+static inline void set_color_scaled(uint8_t led, uint8_t r, uint8_t g, uint8_t b) {
+    uint8_t val = rgb_matrix_get_val();
+    rgb_matrix_set_color(led,
+        (uint8_t)((uint16_t)r * val / 255),
+        (uint8_t)((uint16_t)g * val / 255),
+        (uint8_t)((uint16_t)b * val / 255));
+}
 
 // ESC key shows a single color based on battery level, 3 colors:
 // green (>=30%), orange (>=10%), red (<10%)
@@ -29,7 +37,7 @@ static inline void battery_indicator_simple(uint8_t level, uint8_t led_min, uint
         color = (RGB){0, 255, 0};   // red (GRB)
     }
 
-    rgb_matrix_set_color(esc_led, color.r, color.g, color.b);
+    set_color_scaled(esc_led, color.r, color.g, color.b);
 }
 
 // F1-F12 keys as a progress bar:
@@ -44,9 +52,9 @@ static inline void battery_indicator_fkeys(uint8_t level, uint8_t led_min, uint8
         if (led < led_min || led >= led_max) continue;
 
         if (i < lit) {
-            rgb_matrix_set_color(led, 0, 255, 0);  // green
+            set_color_scaled(led, 0, 255, 0);  // green
         } else {
-            rgb_matrix_set_color(led, 0, 0, 0);    // off
+            set_color_scaled(led, 0, 0, 0);    // off
         }
     }
 }
@@ -74,5 +82,5 @@ static inline void battery_indicator_rainbow(uint8_t level, uint8_t led_min, uin
         color = (RGB){0, 255, 0};    // red (GRB)
     }
 
-    rgb_matrix_set_color(esc_led, color.r, color.g, color.b);
+    set_color_scaled(esc_led, color.r, color.g, color.b);
 }

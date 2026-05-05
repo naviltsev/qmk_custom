@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:docs.qmk.fm)",
+      "Bash(xargs grep *)",
+      "Bash(python3 -c ' *)",
+      "Bash(node -e ' *)"
+    ]
+  }
+}
