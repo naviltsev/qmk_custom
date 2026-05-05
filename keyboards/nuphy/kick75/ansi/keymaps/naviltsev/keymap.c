@@ -16,6 +16,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include QMK_KEYBOARD_H
+#include "battery_indicator.h"
 
 extern DEV_INFO_STRUCT dev_info;
 
@@ -68,48 +69,12 @@ void keyboard_post_init_user(void) {
     rgb_matrix_sethsv_noeeprom(0, 0, 64);
 }
 
-// battery_percent_changed_user documented here https://docs.qmk.fm/features/battery
-// is never called on kick75 it looks like - it manages battery via its own
+// battery_percent_changed_user() documented here https://docs.qmk.fm/features/battery
+// is never called on Kick75 it looks like - it manages battery via its own
 // RF protocol (dev_info.rf_baterry), bypassing the standard QMK battery feature entirely
 bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
-    uint8_t esc_led = g_led_config.matrix_co[0][0];
-
-    // This callback is invoked in batches - skip if ESC's LED isn't in this batch
-    if (esc_led < led_min || esc_led >= led_max) return false;
-
     uint8_t level = dev_info.rf_baterry;
-
-    // The following is likely Kick75 specific,
-    // but seems like LED driver is GRB here,
-    // so R and G channels are swapped
-    // 3-color indicator: green (>=30%),  orange (>=10%), red (<10%)
-    // if (level >= 30) {
-    //     color = (RGB){255, 0, 0};   // green (GRB)
-    // } else if (level >= 10) {
-    //     color = (RGB){140, 255, 0}; // orange (GRB)
-    // } else {
-    //     color = (RGB){0, 255, 0};   // red (GRB)
-    // }
-
-    // Rainbow: red (0%) → orange → yellow → green → cyan → blue → purple (70-100%)
-    RGB color;
-    if (level >= 60) {
-        color = (RGB){0, 128, 128};  // purple (GRB)
-    } else if (level >= 50) {
-        color = (RGB){0, 0, 255};    // blue (GRB)
-    } else if (level >= 40) {
-        color = (RGB){255, 0, 255};  // cyan (GRB)
-    } else if (level >= 30) {
-        color = (RGB){255, 0, 0};    // green (GRB)
-    } else if (level >= 20) {
-        color = (RGB){255, 255, 0};  // yellow (GRB)
-    } else if (level >= 10) {
-        color = (RGB){140, 255, 0};  // orange (GRB)
-    } else {
-        color = (RGB){0, 255, 0};    // red (GRB)
-    }
-
-    rgb_matrix_set_color(esc_led, color.r, color.g, color.b);
+    battery_indicator_simple(level, led_min, led_max);
     return false;
 }
 
