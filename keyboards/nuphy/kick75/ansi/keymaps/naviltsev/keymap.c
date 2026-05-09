@@ -26,13 +26,12 @@ static void connection_indicator_led(uint8_t led_min, uint8_t led_max) {
     uint8_t esc_led = g_led_config.matrix_co[0][0];
     if (esc_led < led_min || esc_led >= led_max) return;
 
-    // GRB order: first component = G, second = R, third = B
     switch (dev_info.link_mode) {
-        case 1: set_color_scaled(esc_led, 255,   0,   0); break; // BT1: red
-        case 2: set_color_scaled(esc_led, 165, 255,   0); break; // BT2: orange
-        case 3: set_color_scaled(esc_led,   0, 255,   0); break; // BT3: green
-        case 0: set_color_scaled(esc_led,   0,   0, 255); break; // RF:  blue
-        case 4: set_color_scaled(esc_led, 255, 255, 255); break; // USB: white
+        case 1: set_color_scaled(esc_led,   0, 128,   0); break; // BT1: green
+        case 2: set_color_scaled(esc_led, 128, 128, 128); break; // BT2: white
+        case 3: set_color_scaled(esc_led, 128,  64,   0); break; // BT3: amber
+        case 0: set_color_scaled(esc_led,   0,   0, 128); break; // RF:  blue
+        case 4: set_color_scaled(esc_led, 128,   0,   0); break; // USB: red
         default: break;
     }
 }

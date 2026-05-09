@@ -38,11 +38,11 @@ ESC key color shows the active connection:
 
 | Connection | Color |
 |---|---|
-| BT1 | Red |
-| BT2 | Orange |
-| BT3 | Yellow |
+| BT1 | Green |
+| BT2 | White |
+| BT3 | Amber |
 | RF (2.4GHz dongle) | Blue |
-| USB | White |
+| USB | Red |
 
 ## RGB
 
