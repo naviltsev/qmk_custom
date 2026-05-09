@@ -28,7 +28,7 @@ Three effects are available, controlled via `rgb_matrix_indicators_advanced_user
 
 1. **battery_indicator_simple** — ESC key shows green (>=30%), orange (>=10%), or red (<10%)
 2. **battery_indicator_rainbow** — ESC key shows one of 7 colors mapped across 0-100%
-3. **battery_indicator_fkeys** — F1-F12 as a progress bar, green keys lit proportionally to battery level
+3. **battery_indicator_fkeys** — F1-F12 as a progress bar, keys lit proportionally to battery level; red (1–4 keys), amber (5–8 keys), green (9–12 keys)
 
 All indicator colors respect the current RGB brightness setting.
 

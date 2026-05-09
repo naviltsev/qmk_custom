@@ -43,16 +43,25 @@ static inline void battery_indicator_simple(uint8_t level, uint8_t led_min, uint
 // F1-F12 keys as a progress bar:
 // - all 12 lit at 100%, none at 0%
 // - each key represents ~8.33% (100/12)
-// - color is always green
+// - color is green for all 9-12 keys, amber for 5-8, red for 1-4
 static inline void battery_indicator_fkeys(uint8_t level, uint8_t led_min, uint8_t led_max) {
     uint8_t lit = (uint8_t)((uint16_t)level * 12 / 100);  // 0-12 keys to light
+
+    RGB color;
+    if (lit >= 0 && lit < 4) {
+        color = (RGB){0, 128, 0}; // red (GRB)
+    } else if (level > 3 && lit < 8) {
+        color = (RGB){64, 128, 0}; // amber (GRB)
+    } else {
+        color = (RGB){128, 0, 0}; // green (GRB)
+    }
 
     for (uint8_t i = 0; i < 12; i++) {
         uint8_t led = g_led_config.matrix_co[0][i + 1];  // F1=col1 .. F12=col12
         if (led < led_min || led >= led_max) continue;
 
         if (i < lit) {
-            set_color_scaled(led, 0, 255, 0);  // green
+            set_color_scaled(led, color.r, color.g, color.b);
         } else {
             set_color_scaled(led, 0, 0, 0);    // off
         }
