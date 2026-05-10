@@ -48,9 +48,9 @@ static inline void battery_indicator_fkeys(uint8_t level, uint8_t led_min, uint8
     uint8_t lit = (uint8_t)((uint16_t)level * 12 / 100);  // 0-12 keys to light
 
     RGB color;
-    if (lit >= 0 && lit < 4) {
+    if (lit <= 4) {
         color = (RGB){0, 128, 0}; // red (GRB)
-    } else if (level > 3 && lit < 8) {
+    } else if (lit <= 8) {
         color = (RGB){64, 128, 0}; // amber (GRB)
     } else {
         color = (RGB){128, 0, 0}; // green (GRB)
