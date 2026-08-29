@@ -21,7 +21,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 extern DEV_INFO_STRUCT dev_info;
 
 // ESC key shows a color based on the current connection:
-// BT1=blue, BT2=pink, BT3=orange, RF=cyan, USB=yellow
 static void connection_indicator_led(uint8_t led_min, uint8_t led_max) {
     uint8_t esc_led = g_led_config.matrix_co[0][0];
     if (esc_led < led_min || esc_led >= led_max) return;
