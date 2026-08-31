@@ -17,6 +17,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include QMK_KEYBOARD_H
 #include "battery_indicator.h"
+#include "agent_layer.h"
 
 extern DEV_INFO_STRUCT dev_info;
 
@@ -37,6 +38,9 @@ static void connection_indicator_led(uint8_t led_min, uint8_t led_max) {
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     if (!record->event.pressed) return true;
+
+    // Pi Agent layer macros (FN + "/" held)
+    if (!agent_process_record(keycode)) return false;
 
     uint8_t layer = get_highest_layer(layer_state);
     uint8_t mods  = get_mods();
@@ -88,6 +92,14 @@ void keyboard_post_init_user(void) {
 // is never called on Kick75 it looks like - it manages battery via its own
 // RF protocol (dev_info.rf_baterry), bypassing the standard QMK battery feature entirely
 bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
+    // On the agent layer the whole board becomes a cheat sheet, so the battery
+    // bar on F1-F12 would fight the skill row. Connection color on ESC stays.
+    if (get_highest_layer(layer_state) == _AGENT) {
+        agent_layer_leds(led_min, led_max);
+        connection_indicator_led(led_min, led_max);
+        return false;
+    }
+
     uint8_t level = dev_info.rf_baterry;
     battery_indicator_fkeys(level, led_min, led_max);
     connection_indicator_led(led_min, led_max);
@@ -126,7 +138,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 	_______, 	LNK_BLE1,  	LNK_BLE2,  	LNK_BLE3,  	LNK_RF,   	_______,   	_______,   	_______,   	_______,   	_______,  	_______,   	_______,	_______, 	_______,	_______,
 	RGB_TOG,	_______,   	_______,   	_______,  	_______,   	_______,   	_______,   	_______,   	_______,   	_______,  	_______,   	DEV_RESET,	SLEEP_MODE, BAT_SHOW,	KC_END,
 	_______,	_______,   	_______,   	_______,  	_______,   	_______,   	_______,	_______,   	_______,   	_______,  	_______,	_______, 	_______,                KC_INS,
-	_______,				_______,   	_______,   	_______,  	_______,   	_______,   	_______,	MO(4), 		RGB_SPD,	RGB_SPI,	_______,	_______,	RGB_VAI,
+	_______,				_______,   	_______,   	_______,  	_______,   	_______,   	_______,	MO(4), 		RGB_SPD,	RGB_SPI,	MO(_AGENT),	_______,	RGB_VAI,
 	_______,	_______,	_______,										_______, 							_______,	MO(3),					RGB_MOD,    RGB_VAD,	RGB_HUI),
 // layer side led fn+m
 [4] = LAYOUT(
@@ -136,14 +148,21 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 	_______,	_______,   	_______,   	_______,  	_______,   	_______,   	_______,	_______,   	_______,   	_______,  	_______,	_______, 	_______,                _______,
 	_______,				_______,   	_______,   	RGB_TEST,  	_______,   	_______,   	_______,	_______, 	SIDE_SPD,	SIDE_SPI,	_______,	_______,	SIDE_VAI,
 	_______,	_______,	_______,										_______, 							_______,	MO(4),   	        	SIDE_MOD,   SIDE_VAD,	SIDE_HUI),
-// layer reserved
-[5] = LAYOUT(
-	_______, 	_______,  	_______,  	_______, 	_______,  	_______,  	_______,  	_______,  	_______,  	_______, 	_______, 	_______, 	_______, 	_______,	_______,
-	_______, 	_______,   	_______,   	_______,  	_______,   	_______,   	_______,   	_______,   	_______,   	_______,  	_______,   	_______,	_______, 	_______,	_______,
-	_______, 	_______,  	_______,  	_______,  	_______,   	_______,   	_______,   	_______,   	_______,   	_______,  	_______,   	_______,	_______, 	_______,	_______,
-	_______,	_______,   	_______,   	_______,  	_______,   	_______,   	_______,	_______,   	_______,   	_______,  	_______,	_______, 	_______,                _______,
-	_______,				_______,   	_______,   	_______,  	_______,   	_______,   	_______,	_______, 	_______,	_______,	_______,	_______,	_______,
-	_______,	_______,	_______,										_______, 							_______,	_______,			    _______,    _______,    _______),
+// layer Pi Agent - held via FN + "/"
+// Rows are color-coded while held; keys with no binding stay dark.
+[_AGENT] = LAYOUT(
+    // skills - cyan
+    _______,        AG_BRAINSTORM,  AG_WRITE_PLAN,  AG_EXEC_PLAN,   AG_DEBUG_SYS,   AG_TDD,         AG_REQ_REVIEW,  AG_RECV_REVIEW, AG_VERIFY,      AG_WORKTREES,   AG_PARALLEL,    AG_COUNCIL,     AG_PONYTAIL,    _______,        _______,
+    // session ops - green
+    _______,        AG_NEW,         AG_RESUME,      AG_FORK,        AG_TREE,        AG_COMPACT,     AG_NAME,        AG_SHARE,       AG_EXPORT,      AG_COPY,        AG_RELOAD,      AG_SETTINGS,    AG_SCOPED,      _______,        _______,
+    // prompt templates - magenta. Add ~/.pi/agent/prompts/<name>.md, then bind
+    // a key here to send the command via a new AG_* keycode in agent_layer.h.
+    XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,
+    // mode chords - amber. Native pi keybindings, Windows defaults.
+    XXXXXXX,        LCTL(LALT(KC_P)), LSFT(KC_TAB), LCTL(KC_L),     LCTL(KC_P),     LALT(KC_P),     LCTL(KC_T),     LCTL(KC_O),     LCTL(KC_Q),     LALT(KC_Q),     LCTL(KC_X),     LCTL(KC_G),     XXXXXXX,                        XXXXXXX,
+    // transcript nav - blue
+    _______,                        LCTL(KC_UP),    LCTL(KC_DOWN),  LCTL(KC_F),     LALT(KC_V),     LCTL(KC_Z),     AG_THINKING,    AG_MODEL,       AG_LLAMA,       AG_DBG,         _______,        XXXXXXX,        _______,
+    _______,        _______,        _______,                                        _______,                                        _______,        _______,                        _______,        _______,        _______),
 // layer reserved
 [6] = LAYOUT(
 	_______, 	_______,  	_______,  	_______, 	_______,  	_______,  	_______,  	_______,  	_______,  	_______, 	_______, 	_______, 	_______, 	_______,	_______,
