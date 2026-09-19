@@ -4,7 +4,10 @@
 			"path": "."
 		},
 		{
-			"path": "C:/Users/nikolay/qmk_firmware"
+			"path": "D:/Dev/_qmk_forks/nuphy"
+		},
+		{
+			"path": "D:/Dev/_qmk_forks/ajazz"
 		}
 	],
 	"settings": {}
