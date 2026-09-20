@@ -122,16 +122,19 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 // --- On-device settings menu (knob) -------------------------------------------
 //
 // Turning the knob always drives the menu: if it's closed, the first turn
-// opens it and that same turn also moves the cursor (MENU_CW/MENU_CCW in
-// process_record_user); once open, turning navigates the list or live-adjusts
-// the selected item's value -- volume included, so there's no separate
-// always-on volume-by-rotation duplicating it. The knob's plain press is
-// overloaded by hold duration: holding it past MUTE_HOLD_MS toggles the whole
-// menu open/closed from any state (see mute_held/mute_hold_fired in
-// process_record_user and the matrix_scan_user poll below), while a quick tap
-// does whichever's contextually useful -- mute when the menu is closed,
-// select/back when it's open (moving between the item list and adjusting the
-// selected item). menu_exit() (the hold-close path) calls
+// opens it straight into Volume/MENU_ADJUST and applies that same turn as the
+// adjustment (menu_enter_to_volume(), via MENU_CW/MENU_CCW in
+// process_record_user) -- so it doubles as a quick-volume shortcut instead of
+// needing a separate always-on volume-by-rotation. Once open, turning
+// navigates the list or live-adjusts whichever item is selected. The knob's
+// plain press is overloaded by hold duration instead: holding it past
+// MUTE_HOLD_MS toggles the whole menu open/closed from any state, landing on
+// the list rather than jumping into Volume, since there's no turn direction
+// to apply there (see mute_held/mute_hold_fired in process_record_user and
+// the matrix_scan_user poll below, and menu_enter() vs. menu_enter_to_volume()
+// above). A quick tap does whichever's contextually useful -- mute when the
+// menu is closed, select/back when it's open (moving between the item list
+// and adjusting the selected item). menu_exit() (the hold-close path) calls
 // display_redraw_dashboard() to hand the panel back to the stock dashboard;
 // display_housekeeping_task_user() suppresses that dashboard's own per-tick
 // redraw while the menu owns the panel.
@@ -235,6 +238,19 @@ static void menu_enter(void) {
     menu_state = MENU_LIST;
     menu_sel   = 0;
     menu_draw_list();
+    layer_on(MENU);
+}
+
+// Used by MENU_CW/MENU_CCW instead of menu_enter() when idle: a knob turn
+// should open the menu AND drill straight into Volume, applying that same
+// turn as the adjustment -- skipping the list so it acts like a quick-volume
+// shortcut. menu_enter() is still what the knob's press-hold uses, landing on
+// the list instead since there's no "this turn" to apply there.
+static void menu_enter_to_volume(void) {
+    if (anim_active()) return;  // animation owns the bus, refuse for now
+    menu_state = MENU_ADJUST;
+    menu_sel   = MENU_ITEM_VOLUME;
+    menu_draw_adjust(true);
     layer_on(MENU);
 }
 
@@ -360,13 +376,13 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             return false;
         case MENU_CW:
             if (record->event.pressed) {
-                if (menu_state == MENU_IDLE) menu_enter();
+                if (menu_state == MENU_IDLE) menu_enter_to_volume();
                 if (menu_state != MENU_IDLE) menu_turn(true);
             }
             return false;
         case MENU_CCW:
             if (record->event.pressed) {
-                if (menu_state == MENU_IDLE) menu_enter();
+                if (menu_state == MENU_IDLE) menu_enter_to_volume();
                 if (menu_state != MENU_IDLE) menu_turn(false);
             }
             return false;
@@ -390,8 +406,8 @@ void matrix_scan_user(void) {
 
 
 // Only ever reached via MENU_CW/MENU_CCW below, once the menu is confirmed
-// open (either already was, or the case above just opened it and this same
-// turn moves the cursor as its first step).
+// open (either already was, or the case above just opened it straight into
+// Volume/MENU_ADJUST and this same turn applies as that first adjustment).
 static void menu_turn(bool clockwise) {
     if (menu_state == MENU_LIST) {
         menu_draw_cursor(menu_sel, MENU_BG);  // clear old cursor position
