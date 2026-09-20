@@ -17,9 +17,28 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include QMK_KEYBOARD_H
 #include "battery_indicator.h"
+#include "gpu_indicator.h"
 #include "agent_layer.h"
 
 extern DEV_INFO_STRUCT dev_info;
+
+// Raw HID feed from a host-side script (e.g. GPU memory %) shown on the
+// number row. GPU_HID_TIMEOUT_MS blanks the row if the host stops sending -
+// otherwise a killed script would leave a stale reading lit forever.
+#define GPU_HID_CMD_MEM_PERCENT 0xA1
+#define GPU_HID_TIMEOUT_MS 5000
+
+static uint8_t  gpu_mem_percent    = 0;
+static uint32_t gpu_last_update_ms = 0;
+static bool     gpu_has_data       = false;
+
+void raw_hid_receive(uint8_t *data, uint8_t length) {
+    if (length >= 2 && data[0] == GPU_HID_CMD_MEM_PERCENT) {
+        gpu_mem_percent    = data[1];
+        gpu_last_update_ms = timer_read32();
+        gpu_has_data       = true;
+    }
+}
 
 // ESC key shows a color based on the current connection:
 static void connection_indicator_led(uint8_t led_min, uint8_t led_max) {
@@ -103,6 +122,11 @@ bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
     uint8_t level = dev_info.rf_baterry;
     battery_indicator_fkeys(level, led_min, led_max);
     connection_indicator_led(led_min, led_max);
+
+    if (gpu_has_data && timer_elapsed32(gpu_last_update_ms) < GPU_HID_TIMEOUT_MS) {
+        gpu_indicator_numrow(gpu_mem_percent, led_min, led_max);
+    }
+
     return false;
 }
 
