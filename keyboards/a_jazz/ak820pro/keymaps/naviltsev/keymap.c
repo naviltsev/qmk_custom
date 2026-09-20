@@ -21,15 +21,20 @@ enum layer_names {
     MACBASE,
     MACFN,
     CURSOR,
-    MENU,  // must stay last/highest: layer_on(MENU) needs top priority over
-           // WINFN/MACFN so the encoder resolves to menu keycodes regardless
-           // of whether Fn is still held
+    // 5 is _AGENT (agent_layer.h) -- left unnamed here since that header
+    // owns the #define, same as it does on the Kick75 keymap it's ported
+    // from; MENU is bumped to 6 to leave the slot free.
+    MENU = 6,  // must stay last/highest: layer_on(MENU) needs top priority
+               // over WINFN/MACFN so the encoder resolves to menu keycodes
+               // regardless of whether Fn is still held
 };
 
 enum custom_keycodes {
     MENU_CW = SAFE_RANGE,  // MENU layer's encoder_map only: knob turned clockwise
     MENU_CCW,              // MENU layer's encoder_map only: knob turned counter-clockwise
 };
+
+#include "agent_layer.h"  // Pi Agent layer macros (WINFN + "/" held); uses MENU_CCW above
 
 #define KC_TASK LGUI(KC_TAB)        // Task viewer
 #define KC_FLXP LGUI(KC_E)          // Windows file explorer
@@ -50,7 +55,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         _______,    _______,    _______,    _______,    _______,    _______,    RM_SATU,    RM_SATD,    _______,    _______,    _______,    RM_SPDD,     RM_SPDU,    _______,    SCR_TOG,
         _______,    BT1,        BT2,        BT3,        BT24G,      _______,    _______,    _______,    _______,    _______,    BT_PAIR,    _______,     _______,    RM_NEXT,    _______,
         _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,                 _______,    _______,
-        _______,                _______,    RM_TOGG,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,     _______,    RM_VALU,
+        _______,                _______,    RM_TOGG,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    MO(_AGENT), _______,    RM_VALU,
         _______,    GU_TOGG,    _______,                                        _______,                            _______,    _______,    _______,     RM_HUED,    RM_VALD,    RM_HUEU
     ),
     [MACBASE] = LAYOUT_82_ansi(
@@ -78,6 +83,23 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         _______,    KC_LEFT,    KC_DOWN,    KC_RGHT,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,                 _______,    _______,
         _______,                _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,     _______,    _______,
         _______,    _______,    _______,                                        _______,                            _______,    _______,    _______,     _______,    _______,    _______
+    ),
+    // Pi Agent layer - held via WINFN + "/" (MO(_AGENT) lives in WINFN).
+    // Rows are color-coded while held (agent_layer_leds in
+    // rgb_matrix_indicators_advanced_user below); keys with no binding stay dark.
+    [_AGENT] = LAYOUT_82_ansi(
+        // skills - cyan
+        _______,        AG_BRAINSTORM,  AG_WRITE_PLAN,  AG_EXEC_PLAN,   AG_DEBUG_SYS,   AG_TDD,         AG_REQ_REVIEW,  AG_RECV_REVIEW, AG_VERIFY,      AG_WORKTREES,   AG_PARALLEL,    AG_COUNCIL,     AG_PONYTAIL,    _______,        _______,
+        // session ops - green
+        _______,        AG_NEW,         AG_RESUME,      AG_FORK,        AG_TREE,        AG_COMPACT,     AG_NAME,        AG_SHARE,       AG_EXPORT,      AG_COPY,        AG_RELOAD,      AG_SETTINGS,    AG_SCOPED,      _______,        _______,
+        // prompt templates - magenta. Add ~/.pi/agent/prompts/<name>.md, then bind
+        // a key here to send the command via a new AG_* keycode in agent_layer.h.
+        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,
+        // mode chords - amber. Native pi keybindings, Windows defaults.
+        XXXXXXX,        LCTL(LALT(KC_P)), LSFT(KC_TAB), LCTL(KC_L),     LCTL(KC_P),     LALT(KC_P),     LCTL(KC_T),     LCTL(KC_O),     LCTL(KC_Q),     LALT(KC_Q),     LCTL(KC_X),     LCTL(KC_G),                     XXXXXXX,        XXXXXXX,
+        // transcript nav - blue
+        _______,                        LCTL(KC_UP),    LCTL(KC_DOWN),  LCTL(KC_F),     LALT(KC_V),     LCTL(KC_Z),     AG_THINKING,    AG_MODEL,       AG_LLAMA,       AG_DBG,         _______,        XXXXXXX,        _______,
+        _______,        _______,        _______,                                        _______,                            _______,        MO(WINFN),      _______,        RM_NEXT,        RM_VALD,    RM_HUEU
     ),
     // Turned on/off programmatically (layer_on/layer_off in menu_enter/exit),
     // not held -- exists only so the encoder resolves to MENU_CW/MENU_CCW
@@ -248,6 +270,12 @@ bool dip_switch_update_user(uint8_t index, bool active) {
 
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+    // Pi Agent layer macros (WINFN + "/" held). Only intercept on press --
+    // AG_* keycodes don't need release handling, and gating like this (rather
+    // than kick75's blanket "ignore all releases" at the top of this
+    // function) keeps every other case below free to see its own releases.
+    if (record->event.pressed && !agent_process_record(keycode)) return false;
+
     // Windows-only: fill in word/line navigation and browser tab-switching
     // that macOS already provides natively via Cmd. Only fires on the plain
     // WINBASE layer (no Fn/Cursor overlay held).
@@ -402,6 +430,15 @@ bool display_housekeeping_task_user(void) {
 }
 
 
+bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
+    if (get_highest_layer(layer_state) == _AGENT) {
+        agent_layer_leds(led_min, led_max);
+        return false;
+    }
+    return true;
+}
+
+
 #if defined(ENCODER_MAP_ENABLE)
 const uint16_t PROGMEM encoder_map[][NUM_ENCODERS][NUM_DIRECTIONS] = {
     // The knob turn always drives the settings menu now (opening it on the
@@ -413,6 +450,7 @@ const uint16_t PROGMEM encoder_map[][NUM_ENCODERS][NUM_DIRECTIONS] = {
     [MACBASE] = {ENCODER_CCW_CW(MENU_CCW, MENU_CW) },
     [MACFN] = {ENCODER_CCW_CW(MENU_CCW, MENU_CW) },
     [CURSOR] = {ENCODER_CCW_CW(MENU_CCW, MENU_CW) },
+    [_AGENT] = {ENCODER_CCW_CW(MENU_CCW, MENU_CW) },
     // Highest active layer whenever the menu is open (layer_on'd in
     // menu_enter), so this wins regardless of whether Fn/WINFN is also on.
     [MENU] = {ENCODER_CCW_CW(MENU_CCW, MENU_CW) }
