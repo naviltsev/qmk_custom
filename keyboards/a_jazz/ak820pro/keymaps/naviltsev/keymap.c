@@ -27,9 +27,8 @@ enum layer_names {
 };
 
 enum custom_keycodes {
-    MENU_TOG = SAFE_RANGE,  // Fn+knob: open/close the on-device settings menu
-    MENU_CW,                // MENU layer's encoder_map only: knob turned clockwise
-    MENU_CCW,               // MENU layer's encoder_map only: knob turned counter-clockwise
+    MENU_CW = SAFE_RANGE,  // MENU layer's encoder_map only: knob turned clockwise
+    MENU_CCW,              // MENU layer's encoder_map only: knob turned counter-clockwise
 };
 
 #define KC_TASK LGUI(KC_TAB)        // Task viewer
@@ -47,7 +46,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         KC_LCTL,    KC_LGUI,    KC_LALT,                                        KC_SPC,                             KC_RALT,    MO(WINFN),  KC_RCTL,     KC_LEFT,    KC_DOWN,    KC_RGHT
     ),
     [WINFN] = LAYOUT_82_ansi(
-        QK_BOOT,    KC_BRID,    KC_BRIU,    KC_TASK,    KC_FLXP,    _______,    _______,    KC_MPRV,    KC_MPLY,    KC_MNXT,    KC_MUTE,    KC_VOLD,     KC_VOLU,    ANIM_TOG,   MENU_TOG,
+        QK_BOOT,    KC_BRID,    KC_BRIU,    KC_TASK,    KC_FLXP,    _______,    _______,    KC_MPRV,    KC_MPLY,    KC_MNXT,    KC_MUTE,    KC_VOLD,     KC_VOLU,    ANIM_TOG,   _______,
         _______,    _______,    _______,    _______,    _______,    _______,    RM_SATU,    RM_SATD,    _______,    _______,    _______,    RM_SPDD,     RM_SPDU,    _______,    SCR_TOG,
         _______,    BT1,        BT2,        BT3,        BT24G,      _______,    _______,    _______,    _______,    _______,    BT_PAIR,    _______,     _______,    RM_NEXT,    _______,
         _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,                 _______,    _______,
@@ -63,7 +62,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         KC_LCTL,    KC_LALT,    KC_LGUI,                                        KC_SPC,                             KC_RGUI,    MO(MACFN),  KC_RCTL,     KC_LEFT,    KC_DOWN,    KC_RGHT
     ),
     [MACFN] = LAYOUT_82_ansi(
-        QK_BOOT,    KC_F1,      KC_F2,      KC_F3,      KC_F4,      KC_F5,      KC_F6,      KC_F7,      KC_F8,      KC_F9,      KC_F10,     KC_F11,     KC_F12,      ANIM_TOG,   MENU_TOG,
+        QK_BOOT,    KC_F1,      KC_F2,      KC_F3,      KC_F4,      KC_F5,      KC_F6,      KC_F7,      KC_F8,      KC_F9,      KC_F10,     KC_F11,     KC_F12,      ANIM_TOG,   _______,
         _______,    _______,    _______,    _______,    _______,    _______,    RM_SATU,    RM_SATD,    _______,    _______,    _______,    RM_SPDD,     RM_SPDU,    _______,    SCR_TOG,
         _______,    BT1,        BT2,        BT3,        BT24G,      _______,    _______,    _______,    _______,    _______,    BT_PAIR,    _______,     _______,    RM_NEXT,    _______,
         _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,                 _______,    _______,
@@ -83,8 +82,10 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     // Turned on/off programmatically (layer_on/layer_off in menu_enter/exit),
     // not held -- exists only so the encoder resolves to MENU_CW/MENU_CCW
     // regardless of whether Fn is still down. Fully transparent otherwise:
-    // MENU_TOG itself lives on WINFN/MACFN (matrix [0,14]), reached by
-    // falling through since this layer doesn't override that cell.
+    // KC_MUTE itself lives on WINBASE/MACBASE (matrix [0,14]), reached by
+    // falling through since neither this layer nor WINFN/MACFN override that
+    // cell -- so it stays reachable for the hold-to-open/select-back logic
+    // in process_record_user even with Fn held.
     [MENU] = LAYOUT_82_ansi(
         _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,     _______,    _______,    _______,
         _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,     _______,    _______,    _______,
@@ -96,16 +97,22 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 };
 
 
-// --- On-device settings menu (Fn+knob) ---------------------------------------
+// --- On-device settings menu (knob) -------------------------------------------
 //
-// Fn+knob-press (MENU_TOG) toggles the whole menu open/closed from any state.
-// While open, a plain knob press (KC_MUTE is intercepted below, regardless of
-// which layer that matrix position resolves to) moves between the item list
-// and adjusting the selected item; turning the knob navigates the list or
-// live-adjusts the selected item's value. display_housekeeping_task_user()
-// suppresses the stock dashboard's own per-tick redraw while the menu owns
-// the panel; MENU_TOG's close path calls display_redraw_dashboard() to hand
-// it back cleanly.
+// Turning the knob always drives the menu: if it's closed, the first turn
+// opens it and that same turn also moves the cursor (MENU_CW/MENU_CCW in
+// process_record_user); once open, turning navigates the list or live-adjusts
+// the selected item's value -- volume included, so there's no separate
+// always-on volume-by-rotation duplicating it. The knob's plain press is
+// overloaded by hold duration: holding it past MUTE_HOLD_MS toggles the whole
+// menu open/closed from any state (see mute_held/mute_hold_fired in
+// process_record_user and the matrix_scan_user poll below), while a quick tap
+// does whichever's contextually useful -- mute when the menu is closed,
+// select/back when it's open (moving between the item list and adjusting the
+// selected item). menu_exit() (the hold-close path) calls
+// display_redraw_dashboard() to hand the panel back to the stock dashboard;
+// display_housekeeping_task_user() suppresses that dashboard's own per-tick
+// redraw while the menu owns the panel.
 
 enum menu_state {
     MENU_IDLE = 0,
@@ -115,17 +122,22 @@ enum menu_state {
 static uint8_t menu_state = MENU_IDLE;
 
 enum menu_item {
-    MENU_ITEM_EFFECT = 0,
+    MENU_ITEM_VOLUME = 0,
+    MENU_ITEM_EFFECT,
     MENU_ITEM_BRIGHTNESS,
-    MENU_ITEM_SATURATION,
     MENU_ITEM_HUE,
     MENU_ITEM_COUNT
 };
 static uint8_t menu_sel = 0;
 
 static const char *const menu_item_names[MENU_ITEM_COUNT] = {
-    "Effect", "Brightness", "Saturation", "Hue",
+    "Volume", "Effect", "Brightness", "Hue",
 };
+
+// Host volume is write-only from the keyboard's side (consumer VOLU/VOLD),
+// so there's no real level to show -- just which way the knob last turned.
+// 0 = neutral (just entered), +1 = last turn was CW, -1 = last turn was CCW.
+static int8_t menu_volume_dir = 0;
 
 #define MENU_FONT_BIG   ASSET_IOSEVKA_REGULAR_30
 #define MENU_FONT_SMALL ASSET_IOSEVKA_MEDIUM_20
@@ -160,12 +172,15 @@ static void menu_draw_list(void) {
 
 // Redraws just the value area (name stays put -- only called on full==true
 // right after entering MENU_ADJUST). RGB Matrix state is queried live each
-// call rather than cached, so this alone is the "current value" source of
-// truth -- no separate menu-local copy to keep in sync.
+// call rather than cached, so that alone is the "current value" source of
+// truth -- no separate menu-local copy to keep in sync. Volume is the
+// exception: the host doesn't report its level back, so it just shows which
+// way the knob last turned instead of a value (see menu_volume_dir above).
 static void menu_draw_adjust(bool full) {
     if (full) {
         menu_clear();
         lcd_draw_flash_text(MENU_FONT_SMALL, 4, 2, menu_item_names[menu_sel]);
+        if (menu_sel == MENU_ITEM_VOLUME) menu_volume_dir = 0;
     } else {
         lcd_clear_rect(0, 40, 128, 60);
     }
@@ -177,9 +192,12 @@ static void menu_draw_adjust(bool full) {
         return;
     }
 
-    uint8_t v = menu_sel == MENU_ITEM_BRIGHTNESS  ? rgb_matrix_get_val()
-                : menu_sel == MENU_ITEM_SATURATION ? rgb_matrix_get_sat()
-                                                    : rgb_matrix_get_hue();
+    if (menu_sel == MENU_ITEM_VOLUME) {
+        lcd_draw_flash_text(MENU_FONT_BIG, 52, 50, menu_volume_dir > 0 ? "+" : menu_volume_dir < 0 ? "-" : "");
+        return;
+    }
+
+    uint8_t v = menu_sel == MENU_ITEM_BRIGHTNESS ? rgb_matrix_get_val() : rgb_matrix_get_hue();
     snprintf(buf, sizeof(buf), "%u", (unsigned)v);
     lcd_draw_flash_text(MENU_FONT_BIG, 10, 50, buf);
 
@@ -203,6 +221,15 @@ static void menu_exit(void) {
     layer_off(MENU);
     display_redraw_dashboard(0, NULL);
 }
+
+// Tap-vs-hold state for the knob's plain press (KC_MUTE, matrix [0,14]).
+// Polled from matrix_scan_user rather than resolved in process_record_user
+// so a hold can fire menu_enter/menu_exit while the key is still down,
+// instead of waiting for release.
+#define MUTE_HOLD_MS 400
+static bool     mute_held       = false;
+static bool     mute_hold_fired = false;
+static uint16_t mute_press_time = 0;
 
 
 bool dip_switch_update_user(uint8_t index, bool active) {
@@ -277,18 +304,20 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                 host_consumer_send(0);
             }
             return false;
-        case MENU_TOG:
-            if (record->event.pressed) {
-                if (menu_state == MENU_IDLE) menu_enter();
-                else                         menu_exit();
-            }
-            return false;
         case KC_MUTE:
-            // Same physical key as MENU_TOG (matrix [0,14]), just without Fn
-            // held. While the menu is open, repurpose it as select/back
-            // instead of actually muting.
-            if (menu_state != MENU_IDLE) {
-                if (record->event.pressed) {
+            // Hold vs. tap is resolved by matrix_scan_user (see mute_held
+            // above); here we just track press/release and, on a release
+            // that wasn't already consumed by a hold-fire, run whichever tap
+            // action fits the current state.
+            if (record->event.pressed) {
+                mute_held       = true;
+                mute_hold_fired = false;
+                mute_press_time = timer_read();
+            } else {
+                mute_held = false;
+                if (mute_hold_fired) {
+                    mute_hold_fired = false;
+                } else if (menu_state != MENU_IDLE) {
                     if (menu_state == MENU_LIST) {
                         menu_state = MENU_ADJUST;
                         menu_draw_adjust(true);
@@ -296,15 +325,22 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                         menu_state = MENU_LIST;
                         menu_draw_list();
                     }
+                } else {
+                    tap_code(KC_MUTE);
                 }
-                return false;
             }
-            return true;
+            return false;
         case MENU_CW:
-            if (record->event.pressed) menu_turn(true);
+            if (record->event.pressed) {
+                if (menu_state == MENU_IDLE) menu_enter();
+                if (menu_state != MENU_IDLE) menu_turn(true);
+            }
             return false;
         case MENU_CCW:
-            if (record->event.pressed) menu_turn(false);
+            if (record->event.pressed) {
+                if (menu_state == MENU_IDLE) menu_enter();
+                if (menu_state != MENU_IDLE) menu_turn(false);
+            }
             return false;
         default:
             return true;
@@ -312,8 +348,22 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 }
 
 
-// Only ever reached via MENU_CW/MENU_CCW below, which only fire while the
-// MENU layer is on -- i.e. only while the menu is actually open.
+// Fires once, mid-hold, as soon as the knob has been down past MUTE_HOLD_MS;
+// the eventual release then sees mute_hold_fired and skips its own tap
+// action. A hold always toggles the whole menu open/closed, whatever substate
+// it was in.
+void matrix_scan_user(void) {
+    if (mute_held && !mute_hold_fired && timer_elapsed(mute_press_time) >= MUTE_HOLD_MS) {
+        mute_hold_fired = true;
+        if (menu_state == MENU_IDLE) menu_enter();
+        else                         menu_exit();
+    }
+}
+
+
+// Only ever reached via MENU_CW/MENU_CCW below, once the menu is confirmed
+// open (either already was, or the case above just opened it and this same
+// turn moves the cursor as its first step).
 static void menu_turn(bool clockwise) {
     if (menu_state == MENU_LIST) {
         menu_draw_cursor(menu_sel, MENU_BG);  // clear old cursor position
@@ -322,6 +372,10 @@ static void menu_turn(bool clockwise) {
         menu_draw_cursor(menu_sel, MENU_ACCENT);
     } else {  // MENU_ADJUST
         switch (menu_sel) {
+            case MENU_ITEM_VOLUME:
+                tap_code(clockwise ? KC_VOLU : KC_VOLD);
+                menu_volume_dir = clockwise ? 1 : -1;
+                break;
             case MENU_ITEM_EFFECT:
                 if (clockwise) rgb_matrix_step_noeeprom();
                 else           rgb_matrix_step_reverse_noeeprom();
@@ -329,10 +383,6 @@ static void menu_turn(bool clockwise) {
             case MENU_ITEM_BRIGHTNESS:
                 if (clockwise) rgb_matrix_increase_val_noeeprom();
                 else           rgb_matrix_decrease_val_noeeprom();
-                break;
-            case MENU_ITEM_SATURATION:
-                if (clockwise) rgb_matrix_increase_sat_noeeprom();
-                else           rgb_matrix_decrease_sat_noeeprom();
                 break;
             case MENU_ITEM_HUE:
                 if (clockwise) rgb_matrix_increase_hue_noeeprom();
@@ -354,11 +404,15 @@ bool display_housekeeping_task_user(void) {
 
 #if defined(ENCODER_MAP_ENABLE)
 const uint16_t PROGMEM encoder_map[][NUM_ENCODERS][NUM_DIRECTIONS] = {
-    [WINBASE] = {ENCODER_CCW_CW(KC_VOLD, KC_VOLU) },
-    [WINFN] = {ENCODER_CCW_CW(KC_VOLD, KC_VOLU) },
-    [MACBASE] = {ENCODER_CCW_CW(KC_VOLD, KC_VOLU) },
-    [MACFN] = {ENCODER_CCW_CW(KC_VOLD, KC_VOLU) },
-    [CURSOR] = {ENCODER_CCW_CW(KC_VOLD, KC_VOLU) },
+    // The knob turn always drives the settings menu now (opening it on the
+    // first turn if it's closed) rather than volume directly, since volume
+    // lives inside the menu as its own item -- see the header comment above
+    // the menu code and the MENU_CW/MENU_CCW handling in process_record_user.
+    [WINBASE] = {ENCODER_CCW_CW(MENU_CCW, MENU_CW) },
+    [WINFN] = {ENCODER_CCW_CW(MENU_CCW, MENU_CW) },
+    [MACBASE] = {ENCODER_CCW_CW(MENU_CCW, MENU_CW) },
+    [MACFN] = {ENCODER_CCW_CW(MENU_CCW, MENU_CW) },
+    [CURSOR] = {ENCODER_CCW_CW(MENU_CCW, MENU_CW) },
     // Highest active layer whenever the menu is open (layer_on'd in
     // menu_enter), so this wins regardless of whether Fn/WINFN is also on.
     [MENU] = {ENCODER_CCW_CW(MENU_CCW, MENU_CW) }
