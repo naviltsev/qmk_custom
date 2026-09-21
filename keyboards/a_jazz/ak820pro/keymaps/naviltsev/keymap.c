@@ -134,10 +134,11 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 // the matrix_scan_user poll below, and menu_enter() vs. menu_enter_to_volume()
 // above). A quick tap does whichever's contextually useful -- mute when the
 // menu is closed, select/back when it's open (moving between the item list
-// and adjusting the selected item). menu_exit() (the hold-close path) calls
-// display_redraw_dashboard() to hand the panel back to the stock dashboard;
-// display_housekeeping_task_user() suppresses that dashboard's own per-tick
-// redraw while the menu owns the panel.
+// and adjusting the selected item, except MENU_ITEM_EXIT, which closes the
+// menu on select instead of entering MENU_ADJUST -- a second way out besides
+// the knob-hold). menu_exit() calls display_redraw_dashboard() to hand the
+// panel back to the stock dashboard; display_housekeeping_task_user()
+// suppresses that dashboard's own per-tick redraw while the menu owns the panel.
 
 enum menu_state {
     MENU_IDLE = 0,
@@ -151,18 +152,30 @@ enum menu_item {
     MENU_ITEM_EFFECT,
     MENU_ITEM_BRIGHTNESS,
     MENU_ITEM_HUE,
+    MENU_ITEM_STATS,
+    MENU_ITEM_EXIT,  // selecting it closes the menu instead of entering MENU_ADJUST
     MENU_ITEM_COUNT
 };
 static uint8_t menu_sel = 0;
 
 static const char *const menu_item_names[MENU_ITEM_COUNT] = {
-    "Volume", "Effect", "Brightness", "Hue",
+    "Volume", "Effect", "Brightness", "Hue", "Stats", "Exit",
 };
 
 // Host volume is write-only from the keyboard's side (consumer VOLU/VOLD),
 // so there's no real level to show -- just which way the knob last turned.
 // 0 = neutral (just entered), +1 = last turn was CW, -1 = last turn was CCW.
 static int8_t menu_volume_dir = 0;
+
+// Live typing stats, counted in the background regardless of whether the
+// menu is even open (see process_record_user) and just displayed when
+// MENU_ITEM_STATS is selected. "Word" is an approximation, not real text
+// awareness: a chunk of symbol-key presses ended by a whitespace key
+// (space/tab/enter), tracked via stats_prev_was_delim so holding/repeating
+// whitespace doesn't inflate the count.
+static uint32_t stats_keycount     = 0;
+static uint32_t stats_wordcount    = 0;
+static bool     stats_prev_was_delim = true;  // true so leading whitespace doesn't count
 
 #define MENU_FONT_BIG   ASSET_IOSEVKA_REGULAR_30
 #define MENU_FONT_SMALL ASSET_IOSEVKA_MEDIUM_20
@@ -176,41 +189,67 @@ static int8_t menu_volume_dir = 0;
 #define MENU_CURSOR_W    3
 #define MENU_TEXT_X      10
 
+// How many rows fit below the "SETTINGS" header in the 128px-tall panel.
+// MENU_ITEM_COUNT can outgrow this (it already has, at 5) -- menu_list_scroll_top()
+// below scrolls the list a page at a time to keep menu_sel always visible,
+// rather than needing every future item to fit on one screen.
+#define MENU_VISIBLE_ROWS ((128 - MENU_LIST_TOP_Y) / MENU_ROW_H)
+
 static void menu_clear(void) {
     lcd_clear_rect(0, 0, 128, 128);
 }
 
-static void menu_draw_cursor(uint8_t sel, uint16_t color) {
-    uint16_t y = MENU_LIST_TOP_Y + (uint16_t)sel * MENU_ROW_H;
+// menu_draw_cursor's `row` is a visible-row index (0..MENU_VISIBLE_ROWS-1),
+// not a raw menu_sel -- callers are responsible for subtracting the current
+// scroll offset first.
+static void menu_draw_cursor(uint8_t row, uint16_t color) {
+    uint16_t y = MENU_LIST_TOP_Y + (uint16_t)row * MENU_ROW_H;
     lcd_fill_rect(0, y, MENU_CURSOR_W, y + 20, color);
+}
+
+// First item index to show on screen so that `sel` ends up visible, clamped
+// so the list doesn't scroll past its last page once it's shorter than one.
+static uint8_t menu_list_scroll_top(uint8_t sel) {
+    if (MENU_ITEM_COUNT <= MENU_VISIBLE_ROWS) return 0;
+    uint8_t top = sel >= MENU_VISIBLE_ROWS ? sel - MENU_VISIBLE_ROWS + 1 : 0;
+    uint8_t max_top = MENU_ITEM_COUNT - MENU_VISIBLE_ROWS;
+    return top > max_top ? max_top : top;
 }
 
 static void menu_draw_list(void) {
     menu_clear();
     lcd_draw_flash_text(MENU_FONT_SMALL, 4, 2, "SETTINGS");
-    for (uint8_t i = 0; i < MENU_ITEM_COUNT; i++) {
+
+    uint8_t scroll_top = menu_list_scroll_top(menu_sel);
+    uint8_t remaining   = MENU_ITEM_COUNT - scroll_top;
+    uint8_t visible     = remaining < MENU_VISIBLE_ROWS ? remaining : MENU_VISIBLE_ROWS;
+    for (uint8_t i = 0; i < visible; i++) {
         uint16_t y = MENU_LIST_TOP_Y + (uint16_t)i * MENU_ROW_H;
-        lcd_draw_flash_text(MENU_FONT_SMALL, MENU_TEXT_X, y, menu_item_names[i]);
+        lcd_draw_flash_text(MENU_FONT_SMALL, MENU_TEXT_X, y, menu_item_names[scroll_top + i]);
     }
-    menu_draw_cursor(menu_sel, MENU_ACCENT);
+    menu_draw_cursor(menu_sel - scroll_top, MENU_ACCENT);
 }
 
 // Redraws just the value area (name stays put -- only called on full==true
 // right after entering MENU_ADJUST). RGB Matrix state is queried live each
 // call rather than cached, so that alone is the "current value" source of
-// truth -- no separate menu-local copy to keep in sync. Volume is the
-// exception: the host doesn't report its level back, so it just shows which
-// way the knob last turned instead of a value (see menu_volume_dir above).
+// truth -- no separate menu-local copy to keep in sync. Volume and Stats are
+// exceptions: Volume's host doesn't report its level back, so it just shows
+// which way the knob last turned instead of a value (see menu_volume_dir
+// above); Stats shows the running stats_keycount/stats_wordcount counters
+// straight (those persist across menu visits, so nothing to reset here).
 static void menu_draw_adjust(bool full) {
     if (full) {
         menu_clear();
         lcd_draw_flash_text(MENU_FONT_SMALL, 4, 2, menu_item_names[menu_sel]);
         if (menu_sel == MENU_ITEM_VOLUME) menu_volume_dir = 0;
     } else {
-        lcd_clear_rect(0, 40, 128, 60);
+        // Wider than a single-value item strictly needs, so Stats' two rows
+        // (Keys/Words) both fit without a separate clear-rect special case.
+        lcd_clear_rect(0, 30, 128, 90);
     }
 
-    char buf[8];
+    char buf[12];
     if (menu_sel == MENU_ITEM_EFFECT) {
         snprintf(buf, sizeof(buf), "%u/%u", (unsigned)rgb_matrix_get_mode(), (unsigned)(RGB_MATRIX_EFFECT_MAX - 1));
         lcd_draw_flash_text(MENU_FONT_BIG, 10, 50, buf);
@@ -219,6 +258,17 @@ static void menu_draw_adjust(bool full) {
 
     if (menu_sel == MENU_ITEM_VOLUME) {
         lcd_draw_flash_text(MENU_FONT_BIG, 52, 50, menu_volume_dir > 0 ? "+" : menu_volume_dir < 0 ? "-" : "");
+        return;
+    }
+
+    if (menu_sel == MENU_ITEM_STATS) {
+        lcd_draw_flash_text(MENU_FONT_SMALL, 4, 40, "Keys");
+        snprintf(buf, sizeof(buf), "%lu", (unsigned long)stats_keycount);
+        lcd_draw_flash_text(MENU_FONT_SMALL, 60, 40, buf);
+
+        lcd_draw_flash_text(MENU_FONT_SMALL, 4, 80, "Words");
+        snprintf(buf, sizeof(buf), "%lu", (unsigned long)stats_wordcount);
+        lcd_draw_flash_text(MENU_FONT_SMALL, 60, 80, buf);
         return;
     }
 
@@ -292,6 +342,27 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     // function) keeps every other case below free to see its own releases.
     if (record->event.pressed && !agent_process_record(keycode)) return false;
 
+    // Live typing stats -- counted here in the background regardless of
+    // whether the menu is even open; only redrawn (rather than merely
+    // updated) while MENU_ITEM_STATS is what's on screen. A "word" is any
+    // run of symbol-key presses (letters/digits/punctuation) ended by a
+    // whitespace key; stats_prev_was_delim keeps repeated whitespace from
+    // counting as multiple words.
+    if (record->event.pressed) {
+        stats_keycount++;
+
+        bool is_delim = keycode == KC_SPC || keycode == KC_TAB || keycode == KC_ENT || keycode == KC_KP_ENTER;
+        bool is_word_char = (keycode >= KC_A && keycode <= KC_0) || (keycode >= KC_MINS && keycode <= KC_SLSH);
+        if (is_delim) {
+            if (!stats_prev_was_delim) stats_wordcount++;
+            stats_prev_was_delim = true;
+        } else if (is_word_char) {
+            stats_prev_was_delim = false;
+        }
+
+        if (menu_state == MENU_ADJUST && menu_sel == MENU_ITEM_STATS) menu_draw_adjust(false);
+    }
+
     // Windows-only: fill in word/line navigation and browser tab-switching
     // that macOS already provides natively via Cmd. Only fires on the plain
     // WINBASE layer (no Fn/Cursor overlay held).
@@ -363,8 +434,12 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                     mute_hold_fired = false;
                 } else if (menu_state != MENU_IDLE) {
                     if (menu_state == MENU_LIST) {
-                        menu_state = MENU_ADJUST;
-                        menu_draw_adjust(true);
+                        if (menu_sel == MENU_ITEM_EXIT) {
+                            menu_exit();
+                        } else {
+                            menu_state = MENU_ADJUST;
+                            menu_draw_adjust(true);
+                        }
                     } else {
                         menu_state = MENU_LIST;
                         menu_draw_list();
@@ -410,10 +485,24 @@ void matrix_scan_user(void) {
 // Volume/MENU_ADJUST and this same turn applies as that first adjustment).
 static void menu_turn(bool clockwise) {
     if (menu_state == MENU_LIST) {
-        menu_draw_cursor(menu_sel, MENU_BG);  // clear old cursor position
-        if (clockwise) menu_sel = (uint8_t)((menu_sel + 1) % MENU_ITEM_COUNT);
-        else           menu_sel = (uint8_t)((menu_sel + MENU_ITEM_COUNT - 1) % MENU_ITEM_COUNT);
-        menu_draw_cursor(menu_sel, MENU_ACCENT);
+        uint8_t old_sel    = menu_sel;
+        uint8_t old_scroll = menu_list_scroll_top(old_sel);
+
+        // Clamp rather than wrap: overshooting past Exit shouldn't loop back
+        // to Volume, and vice versa.
+        if (clockwise) {
+            if (menu_sel < MENU_ITEM_COUNT - 1) menu_sel++;
+        } else {
+            if (menu_sel > 0) menu_sel--;
+        }
+        uint8_t new_scroll = menu_list_scroll_top(menu_sel);
+
+        if (new_scroll != old_scroll) {
+            menu_draw_list();  // scrolled to a different page -- full repaint
+        } else {
+            menu_draw_cursor(old_sel - old_scroll, MENU_BG);       // clear old cursor position
+            menu_draw_cursor(menu_sel - new_scroll, MENU_ACCENT);  // draw new one
+        }
     } else {  // MENU_ADJUST
         switch (menu_sel) {
             case MENU_ITEM_VOLUME:
@@ -440,8 +529,9 @@ static void menu_turn(bool clockwise) {
 
 bool display_housekeeping_task_user(void) {
     // Suppress the stock dashboard's own per-tick redraw while the menu owns
-    // the panel; all menu drawing is event-driven (keypress/encoder), not
-    // ticked, so there's nothing to do here beyond gating stock's.
+    // the panel (Stats included now -- it's just another menu item); all menu
+    // drawing is event-driven (keypress/encoder), not ticked, so there's
+    // nothing to do here beyond gating stock's.
     return menu_state == MENU_IDLE;
 }
 
