@@ -153,13 +153,14 @@ enum menu_item {
     MENU_ITEM_BRIGHTNESS,
     MENU_ITEM_HUE,
     MENU_ITEM_STATS,
+    MENU_ITEM_BATTERY,
     MENU_ITEM_EXIT,  // selecting it closes the menu instead of entering MENU_ADJUST
     MENU_ITEM_COUNT
 };
 static uint8_t menu_sel = 0;
 
 static const char *const menu_item_names[MENU_ITEM_COUNT] = {
-    "Volume", "Effect", "Brightness", "Hue", "Stats", "Exit",
+    "Volume", "Effect", "Brightness", "Hue", "Stats", "Batt.", "Exit",
 };
 
 // Host volume is write-only from the keyboard's side (consumer VOLU/VOLD),
@@ -176,6 +177,64 @@ static int8_t menu_volume_dir = 0;
 static uint32_t stats_keycount     = 0;
 static uint32_t stats_wordcount    = 0;
 static bool     stats_prev_was_delim = true;  // true so leading whitespace doesn't count
+
+// Battery discharge-rate stats: rolling (EMA-smoothed) seconds-per-1%-drop and
+// seconds-per-10%-drop, plus time since the battery was last seen at 100%.
+// Measured with rtc_get_seconds() (RTC/PCF8563-backed free-running seconds
+// count, see rtc/rtc.h) rather than QMK's timer_* APIs, since those pause
+// across sleep and a 1% drop can easily outlast an awake period.
+// ch582_get_battery() (bluetooth/ch582f_ajazz.c) is polled every
+// matrix_scan_user tick -- just a byte compare, so cheap -- and batt_stat_poll()
+// below only does real work on an actual level change. A level *rise*
+// (charging, or the first-ever read at boot) just rebases both trackers'
+// baselines rather than recording a bogus rate.
+//
+// The 10% tracker has its own independent baseline rather than just being the
+// 1% EMA times 10: that way it's a real measurement over a bigger, less noisy
+// window instead of amplifying the 1% tracker's per-sample noise tenfold.
+extern uint8_t  ch582_get_battery(void);
+extern uint32_t rtc_get_seconds(void);
+
+#define BATT_LEVEL_UNKNOWN 0xFF
+#define BATT_EMA_SHIFT 2  // each new sample gets 1/4 weight -- smooths noise, still tracks drift
+
+static uint8_t  batt_last_level    = BATT_LEVEL_UNKNOWN;
+static uint32_t batt_last_change_s = 0;
+static uint32_t batt_secs_per_pct  = 0;  // rolling average; 0 = no measurement yet
+
+static uint8_t  batt_10_baseline_level = BATT_LEVEL_UNKNOWN;
+static uint32_t batt_10_baseline_s     = 0;
+static uint32_t batt_secs_per_10pct    = 0;  // rolling average; 0 = no measurement yet
+
+static bool     batt_seen_full   = false;  // true once ch582_get_battery() has reported 100 this session
+static uint32_t batt_last_full_s = 0;      // rtc_get_seconds() at that most recent 100% reading
+
+// EMA update shared by both trackers: avg==0 (no data yet) snaps straight to
+// the first sample instead of blending toward it.
+static uint32_t batt_ema(uint32_t avg, uint32_t sample) {
+    return avg == 0 ? sample : avg + ((int32_t)(sample - avg) >> BATT_EMA_SHIFT);
+}
+
+// Compact duration formatting for the Battery menu screen: d/h/m/s, dropping
+// units too large to be meaningful (no "0h" prefix once secs < 1h, etc.) so it
+// stays short at any scale from a single 1% drop up to a multi-day "Full" gap.
+// secs == 0 is the "no data yet" sentinel used by all three battery stats.
+static void batt_fmt_duration(char *buf, size_t n, uint32_t secs) {
+    if (secs == 0) {
+        snprintf(buf, n, "--");
+        return;
+    }
+    uint32_t d = secs / 86400;
+    uint32_t h = (secs % 86400) / 3600;
+    uint32_t m = (secs % 3600) / 60;
+    if (d > 0) {
+        snprintf(buf, n, "%lud%02luh", (unsigned long)d, (unsigned long)h);
+    } else if (h > 0) {
+        snprintf(buf, n, "%luh%02lum", (unsigned long)h, (unsigned long)m);
+    } else {
+        snprintf(buf, n, "%lum%02lus", (unsigned long)m, (unsigned long)(secs % 60));
+    }
+}
 
 #define MENU_FONT_BIG   ASSET_IOSEVKA_REGULAR_30
 #define MENU_FONT_SMALL ASSET_IOSEVKA_MEDIUM_20
@@ -238,15 +297,31 @@ static void menu_draw_list(void) {
 // which way the knob last turned instead of a value (see menu_volume_dir
 // above); Stats shows the running stats_keycount/stats_wordcount counters
 // straight (those persist across menu visits, so nothing to reset here).
+// Redraws just the battery-% readout next to the "Batt." header, without
+// touching the rest of the header row. Called both on first entering the
+// item (from menu_draw_adjust's full branch) and from batt_stat_poll on any
+// live level change -- including a rise, since that's still a % change even
+// though it doesn't move the 1%/10% trackers (see batt_stat_poll).
+static void menu_draw_battery_pct(void) {
+    char    pbuf[6];
+    uint8_t b = ch582_get_battery();
+    if (b > 100) snprintf(pbuf, sizeof(pbuf), "--");
+    else         snprintf(pbuf, sizeof(pbuf), "%u%%", (unsigned)b);
+    lcd_clear_rect(90, 0, 128, 20);  // wipe the previous value first -- digit count can shrink (e.g. 100 -> 99)
+    lcd_draw_flash_text(MENU_FONT_SMALL, 92, 2, pbuf);  // pushed to the right edge
+}
+
 static void menu_draw_adjust(bool full) {
     if (full) {
         menu_clear();
         lcd_draw_flash_text(MENU_FONT_SMALL, 4, 2, menu_item_names[menu_sel]);
         if (menu_sel == MENU_ITEM_VOLUME) menu_volume_dir = 0;
+        if (menu_sel == MENU_ITEM_BATTERY) menu_draw_battery_pct();
     } else {
-        // Wider than a single-value item strictly needs, so Stats' two rows
-        // (Keys/Words) both fit without a separate clear-rect special case.
-        lcd_clear_rect(0, 30, 128, 90);
+        // Wider/taller than a single-value item strictly needs, so Stats' two
+        // rows (Keys/Words) and Battery's three (1%/10%/Full) both fit without
+        // a separate clear-rect special case per item.
+        lcd_clear_rect(0, 30, 128, 116);
     }
 
     char buf[12];
@@ -269,6 +344,21 @@ static void menu_draw_adjust(bool full) {
         lcd_draw_flash_text(MENU_FONT_SMALL, 4, 80, "Words");
         snprintf(buf, sizeof(buf), "%lu", (unsigned long)stats_wordcount);
         lcd_draw_flash_text(MENU_FONT_SMALL, 60, 80, buf);
+        return;
+    }
+
+    if (menu_sel == MENU_ITEM_BATTERY) {
+        lcd_draw_flash_text(MENU_FONT_SMALL, 4, 40, "1%");
+        batt_fmt_duration(buf, sizeof(buf), batt_secs_per_pct);
+        lcd_draw_flash_text(MENU_FONT_SMALL, 50, 40, buf);
+
+        lcd_draw_flash_text(MENU_FONT_SMALL, 4, 70, "10%");
+        batt_fmt_duration(buf, sizeof(buf), batt_secs_per_10pct);
+        lcd_draw_flash_text(MENU_FONT_SMALL, 50, 70, buf);
+
+        lcd_draw_flash_text(MENU_FONT_SMALL, 4, 100, "Full");
+        batt_fmt_duration(buf, sizeof(buf), batt_seen_full ? rtc_get_seconds() - batt_last_full_s : 0);
+        lcd_draw_flash_text(MENU_FONT_SMALL, 50, 100, buf);
         return;
     }
 
@@ -467,6 +557,61 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 }
 
 
+// Polls ch582_get_battery() for a level change and, on a drop, updates the
+// 1%/10% EMAs (see their declarations above); on reaching 100, timestamps it
+// for the "Full" stat. Redraws MENU_ITEM_BATTERY live if that's what's on
+// screen when a change lands, same as Stats does for keycount/wordcount in
+// process_record_user.
+static void batt_stat_poll(void) {
+    uint8_t level = ch582_get_battery();
+    if (level > 100) return;  // module hasn't reported yet (0xFF sentinel)
+
+    uint32_t now = rtc_get_seconds();
+
+    if (level == 100) {
+        batt_last_full_s = now;
+        batt_seen_full   = true;
+    }
+
+    if (batt_last_level == BATT_LEVEL_UNKNOWN) {
+        batt_last_level        = level;
+        batt_last_change_s     = now;
+        batt_10_baseline_level = level;
+        batt_10_baseline_s     = now;
+        return;
+    }
+    if (level == batt_last_level) return;
+
+    bool redraw = false;
+
+    if (level < batt_last_level) {
+        uint8_t dropped   = batt_last_level - level;
+        batt_secs_per_pct = batt_ema(batt_secs_per_pct, (now - batt_last_change_s) / dropped);
+        redraw            = true;
+
+        // 10% tracker: its own baseline, only settling once it's actually
+        // seen >=10 points drop -- see the block comment above for why.
+        uint8_t dropped10 = batt_10_baseline_level - level;
+        if (dropped10 >= 10) {
+            batt_secs_per_10pct    = batt_ema(batt_secs_per_10pct, (now - batt_10_baseline_s) * 10 / dropped10);
+            batt_10_baseline_level = level;
+            batt_10_baseline_s     = now;
+        }
+    } else {
+        // level rose (charging): rebase both trackers, don't record a rate.
+        batt_10_baseline_level = level;
+        batt_10_baseline_s     = now;
+    }
+
+    batt_last_level    = level;
+    batt_last_change_s = now;
+
+    if (menu_state == MENU_ADJUST && menu_sel == MENU_ITEM_BATTERY) {
+        menu_draw_battery_pct();             // any change (rise or drop) moves the %
+        if (redraw) menu_draw_adjust(false);  // only a drop moves the 1%/10%/Full rows
+    }
+}
+
 // Fires once, mid-hold, as soon as the knob has been down past MUTE_HOLD_MS;
 // the eventual release then sees mute_hold_fired and skips its own tap
 // action. A hold always toggles the whole menu open/closed, whatever substate
@@ -477,6 +622,8 @@ void matrix_scan_user(void) {
         if (menu_state == MENU_IDLE) menu_enter();
         else                         menu_exit();
     }
+
+    batt_stat_poll();
 }
 
 
@@ -542,6 +689,16 @@ bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
         return false;
     }
     return true;
+}
+
+// Force RGB Matrix to boot into a fixed preset every time, overriding
+// whatever was last persisted to EEPROM via the encoder menu (MENU_ITEM_HUE /
+// MENU_ITEM_BRIGHTNESS). Uses the _noeeprom setters so it doesn't wear the
+// EEPROM and doesn't clobber the saved state -- the menu keeps adjusting the
+// live value in RAM for the rest of the session as before.
+void keyboard_post_init_user(void) {
+    rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR);
+    rgb_matrix_sethsv_noeeprom(176, 255, 128);
 }
 
 
