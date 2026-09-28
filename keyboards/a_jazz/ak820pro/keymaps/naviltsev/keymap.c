@@ -36,6 +36,8 @@ enum custom_keycodes {
 
 #include "agent_layer.h"  // Pi Agent layer macros (WINFN + "/" held); uses MENU_CCW above
 
+#define MENU_AUTO_RETURN_MS 5000
+
 #define KC_TASK LGUI(KC_TAB)        // Task viewer
 #define KC_FLXP LGUI(KC_E)          // Windows file explorer
 #define KC_MCTL KC_MISSION_CONTROL  // Mission Control
@@ -43,10 +45,10 @@ enum custom_keycodes {
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     [WINBASE] = LAYOUT_82_ansi(
-        KC_ESC,     KC_F1,      KC_F2,      KC_F3,      KC_F4,      KC_F5,      KC_F6,      KC_F7,      KC_F8,      KC_F9,      KC_F10,     KC_F11,      KC_F12,     KC_PGUP,    KC_MUTE,
-        KC_GRV,     KC_1,       KC_2,       KC_3,       KC_4,       KC_5,       KC_6,       KC_7,       KC_8,       KC_9,       KC_0,       KC_MINS,     KC_EQL,     KC_BSPC,    KC_PGDN,
-        KC_TAB,     KC_Q,       KC_W,       KC_E,       KC_R,       KC_T,       KC_Y,       KC_U,       KC_I,       KC_O,       KC_P,       KC_LBRC,     KC_RBRC,    KC_BSLS,    KC_HOME,
-        MO(CURSOR), KC_A,       KC_S,       KC_D,       KC_F,       KC_G,       KC_H,       KC_J,       KC_K,       KC_L,       KC_SCLN,    KC_QUOT,                 KC_ENT,     KC_DEL,
+        KC_ESC,     KC_F1,      KC_F2,      KC_F3,      KC_F4,      KC_F5,      KC_F6,      KC_F7,      KC_F8,      KC_F9,      KC_F10,     KC_F11,      KC_F12,     KC_DEL,     KC_MUTE,
+        KC_GRV,     KC_1,       KC_2,       KC_3,       KC_4,       KC_5,       KC_6,       KC_7,       KC_8,       KC_9,       KC_0,       KC_MINS,     KC_EQL,     KC_BSPC,    KC_HOME,
+        KC_TAB,     KC_Q,       KC_W,       KC_E,       KC_R,       KC_T,       KC_Y,       KC_U,       KC_I,       KC_O,       KC_P,       KC_LBRC,     KC_RBRC,    KC_BSLS,    KC_PGUP,
+        MO(CURSOR), KC_A,       KC_S,       KC_D,       KC_F,       KC_G,       KC_H,       KC_J,       KC_K,       KC_L,       KC_SCLN,    KC_QUOT,                 KC_ENT,     KC_PGDN,
         KC_LSFT,                KC_Z,       KC_X,       KC_C,       KC_V,       KC_B,       KC_N,       KC_M,       KC_COMM,    KC_DOT,     KC_SLSH,     KC_RSFT,    KC_UP,
         KC_LCTL,    KC_LGUI,    KC_LALT,                                        KC_SPC,                             KC_RALT,    MO(WINFN),  KC_RCTL,     KC_LEFT,    KC_DOWN,    KC_RGHT
     ),
@@ -59,15 +61,15 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         _______,    GU_TOGG,    _______,                                        _______,                            _______,    _______,    _______,     RM_HUED,    RM_VALD,    RM_HUEU
     ),
     [MACBASE] = LAYOUT_82_ansi(
-        KC_ESC,     KC_BRID,    KC_BRIU,    KC_MCTL,    KC_F4,      KC_F5,      KC_F6,      KC_MPRV,    KC_MPLY,    KC_MNXT,    KC_MUTE,    KC_VOLD,     KC_VOLU,    KC_PGUP,    KC_MUTE,
-        KC_GRV,     KC_1,       KC_2,       KC_3,       KC_4,       KC_5,       KC_6,       KC_7,       KC_8,       KC_9,       KC_0,       KC_MINS,     KC_EQL,     KC_BSPC,    KC_PGDN,
-        KC_TAB,     KC_Q,       KC_W,       KC_E,       KC_R,       KC_T,       KC_Y,       KC_U,       KC_I,       KC_O,       KC_P,       KC_LBRC,     KC_RBRC,    KC_BSLS,    KC_HOME,
-        MO(CURSOR), KC_A,       KC_S,       KC_D,       KC_F,       KC_G,       KC_H,       KC_J,       KC_K,       KC_L,       KC_SCLN,    KC_QUOT,                 KC_ENT,     KC_DEL,
+        KC_ESC,     KC_F1,      KC_F2,      KC_F3,      KC_F4,      KC_F5,      KC_F6,      KC_F7,      KC_F8,      KC_F9,      KC_F10,     KC_F11,      KC_F12,     KC_DEL,     KC_MUTE,
+        KC_GRV,     KC_1,       KC_2,       KC_3,       KC_4,       KC_5,       KC_6,       KC_7,       KC_8,       KC_9,       KC_0,       KC_MINS,     KC_EQL,     KC_BSPC,    KC_HOME,
+        KC_TAB,     KC_Q,       KC_W,       KC_E,       KC_R,       KC_T,       KC_Y,       KC_U,       KC_I,       KC_O,       KC_P,       KC_LBRC,     KC_RBRC,    KC_BSLS,    KC_PGUP,
+        MO(CURSOR), KC_A,       KC_S,       KC_D,       KC_F,       KC_G,       KC_H,       KC_J,       KC_K,       KC_L,       KC_SCLN,    KC_QUOT,                 KC_ENT,     KC_PGDN,
         KC_LSFT,                KC_Z,       KC_X,       KC_C,       KC_V,       KC_B,       KC_N,       KC_M,       KC_COMM,    KC_DOT,     KC_SLSH,     KC_RSFT,    KC_UP,
         KC_LCTL,    KC_LALT,    KC_LGUI,                                        KC_SPC,                             KC_RGUI,    MO(MACFN),  KC_RCTL,     KC_LEFT,    KC_DOWN,    KC_RGHT
     ),
     [MACFN] = LAYOUT_82_ansi(
-        QK_BOOT,    KC_F1,      KC_F2,      KC_F3,      KC_F4,      KC_F5,      KC_F6,      KC_F7,      KC_F8,      KC_F9,      KC_F10,     KC_F11,     KC_F12,      ANIM_TOG,   _______,
+        QK_BOOT,    KC_BRID,    KC_BRIU,    KC_MCTL,    _______,    _______,    _______,    KC_MPRV,    KC_MPLY,    KC_MNXT,    KC_MUTE,    KC_VOLD,     KC_VOLU,    ANIM_TOG,   _______,
         _______,    _______,    _______,    _______,    _______,    _______,    RM_SATU,    RM_SATD,    _______,    _______,    _______,    RM_SPDD,     RM_SPDU,    _______,    SCR_TOG,
         _______,    BT1,        BT2,        BT3,        BT24G,      _______,    _______,    _______,    _______,    _______,    BT_PAIR,    _______,     _______,    RM_NEXT,    _______,
         _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,                 _______,    _______,
@@ -79,8 +81,8 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     [CURSOR] = LAYOUT_82_ansi(
         _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,     _______,    _______,    _______,
         _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,     _______,    _______,    _______,
-        _______,    _______,    KC_UP,      _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,     _______,    _______,    _______,
-        _______,    KC_LEFT,    KC_DOWN,    KC_RGHT,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,                 _______,    _______,
+        _______,    _______,    KC_UP,      _______,    _______,    _______,    _______,    _______,    KC_UP,      _______,    _______,    _______,     _______,    _______,    _______,
+        _______,    KC_LEFT,    KC_DOWN,    KC_RGHT,    _______,    _______,    _______,    KC_LEFT,    KC_DOWN,    KC_RGHT,    _______,    _______,                 _______,    _______,
         _______,                _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,     _______,    _______,
         _______,    _______,    _______,                                        _______,                            _______,    _______,    _______,     _______,    _______,    _______
     ),
@@ -159,6 +161,8 @@ enum menu_item {
 };
 static uint8_t menu_sel = 0;
 
+static uint32_t menu_entry_time = 0;
+
 static const char *const menu_item_names[MENU_ITEM_COUNT] = {
     "Volume", "Effect", "Brightness", "Hue", "Stats", "Batt.", "Exit",
 };
@@ -179,7 +183,9 @@ static uint32_t stats_wordcount    = 0;
 static bool     stats_prev_was_delim = true;  // true so leading whitespace doesn't count
 
 // Battery discharge-rate stats: rolling (EMA-smoothed) seconds-per-1%-drop and
-// seconds-per-10%-drop, plus time since the battery was last seen at 100%.
+// seconds-per-10%-drop, plus time since the "Last" reset point -- either the
+// battery last hitting 100% or the keyboard's last power-on, whichever is
+// more recent.
 // Measured with rtc_get_seconds() (RTC/PCF8563-backed free-running seconds
 // count, see rtc/rtc.h) rather than QMK's timer_* APIs, since those pause
 // across sleep and a 1% drop can easily outlast an awake period.
@@ -206,8 +212,8 @@ static uint8_t  batt_10_baseline_level = BATT_LEVEL_UNKNOWN;
 static uint32_t batt_10_baseline_s     = 0;
 static uint32_t batt_secs_per_10pct    = 0;  // rolling average; 0 = no measurement yet
 
-static bool     batt_seen_full   = false;  // true once ch582_get_battery() has reported 100 this session
-static uint32_t batt_last_full_s = 0;      // rtc_get_seconds() at that most recent 100% reading
+static bool     batt_last_valid   = false;  // true once the "Last" reset point is known (set at init and on hitting 100%)
+static uint32_t batt_last_reset_s = 0;      // rtc_get_seconds() at that most recent reset point
 
 // EMA update shared by both trackers: avg==0 (no data yet) snaps straight to
 // the first sample instead of blending toward it.
@@ -217,7 +223,7 @@ static uint32_t batt_ema(uint32_t avg, uint32_t sample) {
 
 // Compact duration formatting for the Battery menu screen: d/h/m/s, dropping
 // units too large to be meaningful (no "0h" prefix once secs < 1h, etc.) so it
-// stays short at any scale from a single 1% drop up to a multi-day "Full" gap.
+// stays short at any scale from a single 1% drop up to a multi-day "Last" gap.
 // secs == 0 is the "no data yet" sentinel used by all three battery stats.
 static void batt_fmt_duration(char *buf, size_t n, uint32_t secs) {
     if (secs == 0) {
@@ -319,7 +325,7 @@ static void menu_draw_adjust(bool full) {
         if (menu_sel == MENU_ITEM_BATTERY) menu_draw_battery_pct();
     } else {
         // Wider/taller than a single-value item strictly needs, so Stats' two
-        // rows (Keys/Words) and Battery's three (1%/10%/Full) both fit without
+        // rows (Keys/Words) and Battery's three (1%/10%/Last) both fit without
         // a separate clear-rect special case per item.
         lcd_clear_rect(0, 30, 128, 116);
     }
@@ -356,8 +362,8 @@ static void menu_draw_adjust(bool full) {
         batt_fmt_duration(buf, sizeof(buf), batt_secs_per_10pct);
         lcd_draw_flash_text(MENU_FONT_SMALL, 50, 70, buf);
 
-        lcd_draw_flash_text(MENU_FONT_SMALL, 4, 100, "Full");
-        batt_fmt_duration(buf, sizeof(buf), batt_seen_full ? rtc_get_seconds() - batt_last_full_s : 0);
+        lcd_draw_flash_text(MENU_FONT_SMALL, 4, 100, "Last");
+        batt_fmt_duration(buf, sizeof(buf), batt_last_valid ? rtc_get_seconds() - batt_last_reset_s : 0);
         lcd_draw_flash_text(MENU_FONT_SMALL, 50, 100, buf);
         return;
     }
@@ -377,6 +383,7 @@ static void menu_enter(void) {
     if (anim_active()) return;  // animation owns the bus, refuse for now
     menu_state = MENU_LIST;
     menu_sel   = 0;
+    menu_entry_time = timer_read();
     menu_draw_list();
     layer_on(MENU);
 }
@@ -390,6 +397,7 @@ static void menu_enter_to_volume(void) {
     if (anim_active()) return;  // animation owns the bus, refuse for now
     menu_state = MENU_ADJUST;
     menu_sel   = MENU_ITEM_VOLUME;
+    menu_entry_time = timer_read();
     menu_draw_adjust(true);
     layer_on(MENU);
 }
@@ -542,13 +550,19 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         case MENU_CW:
             if (record->event.pressed) {
                 if (menu_state == MENU_IDLE) menu_enter_to_volume();
-                if (menu_state != MENU_IDLE) menu_turn(true);
+                if (menu_state != MENU_IDLE) {
+                    if (menu_state == MENU_ADJUST && menu_sel == MENU_ITEM_VOLUME) menu_entry_time = timer_read();
+                    menu_turn(true);
+                }
             }
             return false;
         case MENU_CCW:
             if (record->event.pressed) {
                 if (menu_state == MENU_IDLE) menu_enter_to_volume();
-                if (menu_state != MENU_IDLE) menu_turn(false);
+                if (menu_state != MENU_IDLE) {
+                    if (menu_state == MENU_ADJUST && menu_sel == MENU_ITEM_VOLUME) menu_entry_time = timer_read();
+                    menu_turn(false);
+                }
             }
             return false;
         default:
@@ -559,9 +573,9 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 
 // Polls ch582_get_battery() for a level change and, on a drop, updates the
 // 1%/10% EMAs (see their declarations above); on reaching 100, timestamps it
-// for the "Full" stat. Redraws MENU_ITEM_BATTERY live if that's what's on
-// screen when a change lands, same as Stats does for keycount/wordcount in
-// process_record_user.
+// for the "Last" stat (also reset at init -- see keyboard_post_init_user).
+// Redraws MENU_ITEM_BATTERY live if that's what's on screen when a change
+// lands, same as Stats does for keycount/wordcount in process_record_user.
 static void batt_stat_poll(void) {
     uint8_t level = ch582_get_battery();
     if (level > 100) return;  // module hasn't reported yet (0xFF sentinel)
@@ -569,8 +583,8 @@ static void batt_stat_poll(void) {
     uint32_t now = rtc_get_seconds();
 
     if (level == 100) {
-        batt_last_full_s = now;
-        batt_seen_full   = true;
+        batt_last_reset_s = now;
+        batt_last_valid   = true;
     }
 
     if (batt_last_level == BATT_LEVEL_UNKNOWN) {
@@ -621,6 +635,10 @@ void matrix_scan_user(void) {
         mute_hold_fired = true;
         if (menu_state == MENU_IDLE) menu_enter();
         else                         menu_exit();
+    }
+
+    if (menu_state == MENU_ADJUST && menu_sel == MENU_ITEM_VOLUME && timer_elapsed(menu_entry_time) >= MENU_AUTO_RETURN_MS) {
+        menu_exit();
     }
 
     batt_stat_poll();
@@ -684,7 +702,11 @@ bool display_housekeeping_task_user(void) {
 
 
 bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
-    if (get_highest_layer(layer_state) == _AGENT) {
+    // Layer membership, not get_highest_layer: MENU (layer 6) outranks
+    // _AGENT (layer 5) so it can win keycode lookup while the settings menu
+    // is open, but MENU has no LED painting of its own, so _AGENT's coloring
+    // should still show through underneath it.
+    if (IS_LAYER_ON_STATE(layer_state, _AGENT)) {
         agent_layer_leds(led_min, led_max);
         return false;
     }
@@ -699,6 +721,12 @@ bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
 void keyboard_post_init_user(void) {
     rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR);
     rgb_matrix_sethsv_noeeprom(176, 255, 128);
+
+    // Power-on also resets the Battery menu's "Last" stat, same as hitting
+    // 100% does in batt_stat_poll -- "Last" means since whichever of those
+    // two happened more recently.
+    batt_last_reset_s = rtc_get_seconds();
+    batt_last_valid   = true;
 }
 
 
