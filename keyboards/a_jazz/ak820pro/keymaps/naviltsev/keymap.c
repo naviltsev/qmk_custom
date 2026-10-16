@@ -182,49 +182,68 @@ static uint32_t stats_keycount     = 0;
 static uint32_t stats_wordcount    = 0;
 static bool     stats_prev_was_delim = true;  // true so leading whitespace doesn't count
 
-// Battery discharge-rate stats: rolling (EMA-smoothed) seconds-per-1%-drop and
-// seconds-per-10%-drop, plus time since the "Last" reset point -- either the
-// battery last hitting 100% or the keyboard's last power-on, whichever is
-// more recent.
-// Measured with rtc_get_seconds() (RTC/PCF8563-backed free-running seconds
+// Battery monitoring, one "discharge session" at a time. A session starts when
+// USB is unplugged (or at power-on if already on battery) and is thrown away
+// when USB is plugged back in -- RAM only, so a reboot also loses it.
+//   1%   rolling (EMA-smoothed) seconds-per-1%-drop, kept across sessions
+//   L:   the level at the start of the session, and time since then
+//   list one row per batt_thresholds[] entry, filled with the wall-clock
+//        time + date the level first dropped to (or below) that threshold in
+//        this session; thresholds at/above the starting level stay "--"
+// Elapsed time uses rtc_get_seconds() (RTC/PCF8563-backed free-running seconds
 // count, see rtc/rtc.h) rather than QMK's timer_* APIs, since those pause
-// across sleep and a 1% drop can easily outlast an awake period.
+// across sleep and a 1% drop can easily outlast an awake period; the list's
+// time/date stamps come from rtc_get_time().
 // ch582_get_battery() (bluetooth/ch582f_ajazz.c) is polled every
 // matrix_scan_user tick -- just a byte compare, so cheap -- and batt_stat_poll()
-// below only does real work on an actual level change. A level *rise*
-// (charging, or the first-ever read at boot) just rebases both trackers'
-// baselines rather than recording a bogus rate.
+// below only does real work on an actual level change.
 //
-// The 10% tracker has its own independent baseline rather than just being the
-// 1% EMA times 10: that way it's a real measurement over a bigger, less noisy
-// window instead of amplifying the 1% tracker's per-sample noise tenfold.
+// "Plugged" means the charger IC's CHRG pin says it's charging (see
+// batt_usb_plugged), debounced so a contact bounce doesn't wipe the session.
 extern uint8_t  ch582_get_battery(void);
 extern uint32_t rtc_get_seconds(void);
 
 #define BATT_LEVEL_UNKNOWN 0xFF
 #define BATT_EMA_SHIFT 2  // each new sample gets 1/4 weight -- smooths noise, still tracks drift
+#define BATT_PLUG_DEBOUNCE_MS 1000
+#define BATT_SETTLE_S 600  // after unplug, ignore drops for the 1% rate this long
+
+static const uint8_t batt_thresholds[] = {100, 90, 80, 70, 60, 50, 40, 30, 20, 10, 5, 1};
+#define BATT_NTHR (sizeof(batt_thresholds) / sizeof(batt_thresholds[0]))
+
+typedef struct {
+    bool    set;                  // false = still "--"
+    bool    time_ok;              // false = RTC wasn't seeded when it was crossed
+    uint8_t hour, minute, day, month;
+} batt_stamp_t;
 
 static uint8_t  batt_last_level    = BATT_LEVEL_UNKNOWN;
 static uint32_t batt_last_change_s = 0;
-static uint32_t batt_secs_per_pct  = 0;  // rolling average; 0 = no measurement yet
+static uint32_t batt_secs_per_pct  = 0;      // rolling average; 0 = no measurement yet
+static bool     batt_rate_armed    = false;  // first drop of a session only re-baselines (it started mid-percent)
 
-static uint8_t  batt_10_baseline_level = BATT_LEVEL_UNKNOWN;
-static uint32_t batt_10_baseline_s     = 0;
-static uint32_t batt_secs_per_10pct    = 0;  // rolling average; 0 = no measurement yet
+static bool     batt_plugged       = false;
+static bool     batt_session_valid = false;  // false while plugged, or until the first valid level is read
+static uint8_t  batt_base_level    = 0;      // "L:" level -- battery level when the session started
+static uint32_t batt_base_s        = 0;      // rtc_get_seconds() when it started
+static batt_stamp_t batt_stamps[BATT_NTHR];
 
-static bool     batt_last_valid   = false;  // true once the "Last" reset point is known (set at init and on hitting 100%)
-static uint32_t batt_last_reset_s = 0;      // rtc_get_seconds() at that most recent reset point
+// Battery screen scroll position, as an item index: 0 = the 1% row, 1 = "L:",
+// 2.. = batt_thresholds[]. Reset to the top each time the screen is entered.
+#define BATT_ITEM_THR0   2
+#define BATT_ITEM_COUNT  (BATT_ITEM_THR0 + BATT_NTHR)
+static uint8_t batt_scroll = 0;
 
-// EMA update shared by both trackers: avg==0 (no data yet) snaps straight to
-// the first sample instead of blending toward it.
+// EMA update: avg==0 (no data yet) snaps straight to the first sample instead
+// of blending toward it.
 static uint32_t batt_ema(uint32_t avg, uint32_t sample) {
     return avg == 0 ? sample : avg + ((int32_t)(sample - avg) >> BATT_EMA_SHIFT);
 }
 
 // Compact duration formatting for the Battery menu screen: d/h/m/s, dropping
 // units too large to be meaningful (no "0h" prefix once secs < 1h, etc.) so it
-// stays short at any scale from a single 1% drop up to a multi-day "Last" gap.
-// secs == 0 is the "no data yet" sentinel used by all three battery stats.
+// stays short at any scale from a single 1% drop up to a multi-day "L:" gap.
+// secs == 0 is the "no data yet" sentinel for the 1% rate.
 static void batt_fmt_duration(char *buf, size_t n, uint32_t secs) {
     if (secs == 0) {
         snprintf(buf, n, "--");
@@ -317,17 +336,91 @@ static void menu_draw_battery_pct(void) {
     lcd_draw_flash_text(MENU_FONT_SMALL, 92, 2, pbuf);  // pushed to the right edge
 }
 
+// Battery screen body. Items (see BATT_ITEM_*) are one text line each, except
+// a filled threshold row, which takes a second line for its date (day/month).
+// Draws from batt_scroll down until the panel is full; the knob scrolls by
+// item (menu_turn), so a row is never entered half-way.
+#define BATT_LIST_Y   26
+#define BATT_LINE_H   24
+#define BATT_TEXT_X   2
+#define BATT_DATE_PAD "     "  // lines the date up under the time
+
+static uint8_t batt_item_lines(uint8_t item) {
+    return item >= BATT_ITEM_THR0 && batt_stamps[item - BATT_ITEM_THR0].set ? 2 : 1;
+}
+
+// Largest scroll position that still leaves the panel full -- scrolling past
+// it would only reveal blank space.
+static uint8_t batt_scroll_max(void) {
+    uint8_t lines = 0, i = BATT_ITEM_COUNT;
+    while (i > 0 && lines + batt_item_lines(i - 1) <= (128 - BATT_LIST_Y) / BATT_LINE_H) {
+        i--;
+        lines += batt_item_lines(i);
+    }
+    return i;
+}
+
+static void menu_draw_battery_rows(void) {
+    char buf[20], dur[12];
+    uint16_t y = BATT_LIST_Y;
+
+    uint8_t top = batt_scroll;
+    if (top > batt_scroll_max()) top = batt_scroll_max();
+
+    for (uint8_t item = top; item < BATT_ITEM_COUNT; item++) {
+        for (uint8_t ln = 0; ln < batt_item_lines(item); ln++, y += BATT_LINE_H) {
+            if (y + BATT_LINE_H > 128) return;
+
+            if (item == 0) {
+                batt_fmt_duration(dur, sizeof(dur), batt_secs_per_pct);
+                snprintf(buf, sizeof(buf), "1%%   %s", dur);
+            } else if (item == 1) {
+                // "L:" = level at the start of this discharge session, then
+                // time since. No parentheses -- the panel only fits ~11 chars.
+                if (batt_plugged) {
+                    snprintf(buf, sizeof(buf), "L: on USB");
+                } else if (!batt_session_valid) {
+                    snprintf(buf, sizeof(buf), "L: --");
+                } else {
+                    uint32_t e = rtc_get_seconds() - batt_base_s;
+                    if (e == 0) snprintf(dur, sizeof(dur), "0m00s");
+                    else        batt_fmt_duration(dur, sizeof(dur), e);
+                    snprintf(buf, sizeof(buf), "L:%u%% %s", (unsigned)batt_base_level, dur);
+                    if (strlen(buf) > 11) snprintf(buf, sizeof(buf), "L:%u%%%s", (unsigned)batt_base_level, dur);  // 3-digit level + long gap: drop the space
+                }
+            } else {
+                uint8_t i = item - BATT_ITEM_THR0;
+                const batt_stamp_t *s = &batt_stamps[i];
+                if (!s->set) {
+                    snprintf(buf, sizeof(buf), "%3u%% --", (unsigned)batt_thresholds[i]);
+                } else if (ln == 0) {
+                    if (s->time_ok) snprintf(buf, sizeof(buf), "%3u%% %02u:%02u", (unsigned)batt_thresholds[i], (unsigned)s->hour, (unsigned)s->minute);
+                    else            snprintf(buf, sizeof(buf), "%3u%% --:--", (unsigned)batt_thresholds[i]);
+                } else {
+                    if (s->time_ok) snprintf(buf, sizeof(buf), BATT_DATE_PAD "%u/%u", (unsigned)s->day, (unsigned)s->month);
+                    else            buf[0] = '\0';
+                }
+            }
+            lcd_draw_flash_text(MENU_FONT_SMALL, BATT_TEXT_X, y, buf);
+        }
+    }
+}
+
 static void menu_draw_adjust(bool full) {
     if (full) {
         menu_clear();
         lcd_draw_flash_text(MENU_FONT_SMALL, 4, 2, menu_item_names[menu_sel]);
         if (menu_sel == MENU_ITEM_VOLUME) menu_volume_dir = 0;
-        if (menu_sel == MENU_ITEM_BATTERY) menu_draw_battery_pct();
+        if (menu_sel == MENU_ITEM_BATTERY) {
+            batt_scroll = 0;
+            menu_draw_battery_pct();
+        }
     } else {
         // Wider/taller than a single-value item strictly needs, so Stats' two
-        // rows (Keys/Words) and Battery's three (1%/10%/Last) both fit without
-        // a separate clear-rect special case per item.
-        lcd_clear_rect(0, 30, 128, 116);
+        // rows (Keys/Words) and Battery's scrolling list both fit without a
+        // separate clear-rect special case per item. Starts just under the
+        // header row (Battery's first row sits at y=26).
+        lcd_clear_rect(0, 26, 128, 102);
     }
 
     char buf[12];
@@ -354,17 +447,7 @@ static void menu_draw_adjust(bool full) {
     }
 
     if (menu_sel == MENU_ITEM_BATTERY) {
-        lcd_draw_flash_text(MENU_FONT_SMALL, 4, 40, "1%");
-        batt_fmt_duration(buf, sizeof(buf), batt_secs_per_pct);
-        lcd_draw_flash_text(MENU_FONT_SMALL, 50, 40, buf);
-
-        lcd_draw_flash_text(MENU_FONT_SMALL, 4, 70, "10%");
-        batt_fmt_duration(buf, sizeof(buf), batt_secs_per_10pct);
-        lcd_draw_flash_text(MENU_FONT_SMALL, 50, 70, buf);
-
-        lcd_draw_flash_text(MENU_FONT_SMALL, 4, 100, "Last");
-        batt_fmt_duration(buf, sizeof(buf), batt_last_valid ? rtc_get_seconds() - batt_last_reset_s : 0);
-        lcd_draw_flash_text(MENU_FONT_SMALL, 50, 100, buf);
+        menu_draw_battery_rows();
         return;
     }
 
@@ -571,58 +654,142 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 }
 
 
-// Polls ch582_get_battery() for a level change and, on a drop, updates the
-// 1%/10% EMAs (see their declarations above); on reaching 100, timestamps it
-// for the "Last" stat (also reset at init -- see keyboard_post_init_user).
-// Redraws MENU_ITEM_BATTERY live if that's what's on screen when a change
-// lands, same as Stats does for keycount/wordcount in process_record_user.
+static bool batt_screen_active(void) {
+    return menu_state == MENU_ADJUST && menu_sel == MENU_ITEM_BATTERY;
+}
+
+// CHRG is active-low while the charger is charging (same pin update_leds() in
+// ak820pro.c uses for the Charging LED). Measured on this board: cable in and
+// charging = CHRG low / STDBY high, cable out = CHRG high / STDBY low -- so
+// STDBY can't be used (it's low on battery). Consequence: once charging
+// finishes with the cable still in, CHRG goes high and this reads "unplugged",
+// so the session starts at that point (full battery), which is what we want.
+static bool batt_usb_plugged(void) {
+    return !gpio_read_pin(CHARGE_CHRG_PIN);
+}
+
+// Tracks plugged/unplugged with a debounce. Any change of state throws the
+// current session away: plugging in ends it (the list is reset), unplugging
+// leaves it empty until batt_stat_poll() reads the first level and starts a
+// new one.
+static void batt_plug_poll(void) {
+    static bool     known   = false;
+    static bool     pending = false;
+    static uint32_t pending_t;
+
+    bool raw = batt_usb_plugged();
+    if (!known) {
+        known        = true;
+        batt_plugged = raw;
+        return;
+    }
+    if (raw == batt_plugged) {
+        pending = false;
+        return;
+    }
+    if (!pending) {
+        pending   = true;
+        pending_t = timer_read32();
+        return;
+    }
+    if (timer_elapsed32(pending_t) < BATT_PLUG_DEBOUNCE_MS) return;
+
+    pending            = false;
+    batt_plugged       = raw;
+    batt_session_valid = false;
+    batt_last_level    = BATT_LEVEL_UNKNOWN;
+    batt_rate_armed    = false;
+    memset(batt_stamps, 0, sizeof(batt_stamps));
+
+    if (batt_screen_active()) {
+        batt_scroll = 0;
+        menu_draw_adjust(false);
+    }
+}
+
+// Records the wall-clock time a threshold was crossed.
+static void batt_stamp(batt_stamp_t *s) {
+    rtc_time_t t;
+    s->set     = true;
+    s->time_ok = rtc_get_time(&t);
+    if (s->time_ok) {
+        s->hour   = t.hours;
+        s->minute = t.minutes;
+        s->day    = t.day;
+        s->month  = t.month;
+    }
+}
+
+// Polls ch582_get_battery() for a level change. While on battery, a drop
+// updates the 1% EMA and stamps every threshold it crossed; while plugged in
+// it only keeps the level readout current. Redraws MENU_ITEM_BATTERY live if
+// that's what's on screen when a change lands, same as Stats does for
+// keycount/wordcount in process_record_user.
 static void batt_stat_poll(void) {
+    batt_plug_poll();
+
     uint8_t level = ch582_get_battery();
     if (level > 100) return;  // module hasn't reported yet (0xFF sentinel)
 
     uint32_t now = rtc_get_seconds();
 
-    if (level == 100) {
-        batt_last_reset_s = now;
-        batt_last_valid   = true;
+    if (batt_plugged) {
+        // Charging: no rates, no list. Just track the level so the first
+        // reading after unplug isn't compared against a stale one.
+        if (level != batt_last_level) {
+            batt_last_level    = level;
+            batt_last_change_s = now;
+            if (batt_screen_active()) menu_draw_battery_pct();
+        }
+        return;
     }
 
-    if (batt_last_level == BATT_LEVEL_UNKNOWN) {
-        batt_last_level        = level;
-        batt_last_change_s     = now;
-        batt_10_baseline_level = level;
-        batt_10_baseline_s     = now;
+    if (!batt_session_valid) {
+        // First valid level since power-on / unplug: this is "L:".
+        batt_session_valid = true;
+        batt_base_level    = level;
+        batt_base_s        = now;
+        batt_last_level    = level;
+        batt_last_change_s = now;
+        batt_rate_armed    = false;
+        memset(batt_stamps, 0, sizeof(batt_stamps));
+        if (batt_screen_active()) {
+            menu_draw_battery_pct();
+            menu_draw_adjust(false);
+        }
         return;
     }
     if (level == batt_last_level) return;
 
-    bool redraw = false;
-
-    if (level < batt_last_level) {
-        uint8_t dropped   = batt_last_level - level;
-        batt_secs_per_pct = batt_ema(batt_secs_per_pct, (now - batt_last_change_s) / dropped);
-        redraw            = true;
-
-        // 10% tracker: its own baseline, only settling once it's actually
-        // seen >=10 points drop -- see the block comment above for why.
-        uint8_t dropped10 = batt_10_baseline_level - level;
-        if (dropped10 >= 10) {
-            batt_secs_per_10pct    = batt_ema(batt_secs_per_10pct, (now - batt_10_baseline_s) * 10 / dropped10);
-            batt_10_baseline_level = level;
-            batt_10_baseline_s     = now;
+    bool drop = level < batt_last_level;
+    if (drop) {
+        // The session began somewhere inside a percent, so the first drop's
+        // elapsed time isn't a full 1%: use it only as the baseline. Drops in
+        // the first BATT_SETTLE_S are also left out of the average: the gauge
+        // reads high off the charger and falls fast once unplugged (e.g. 92 ->
+        // 80 within seconds), which isn't real drain. The threshold list below
+        // still records them.
+        if (batt_rate_armed && now - batt_base_s >= BATT_SETTLE_S) {
+            uint8_t dropped   = batt_last_level - level;
+            batt_secs_per_pct = batt_ema(batt_secs_per_pct, (now - batt_last_change_s) / dropped);
         }
-    } else {
-        // level rose (charging): rebase both trackers, don't record a rate.
-        batt_10_baseline_level = level;
-        batt_10_baseline_s     = now;
+        batt_rate_armed = true;
+
+        // Stamp every threshold passed on the way down (level can skip), but
+        // only ones below where we started: a jittery rise-and-fall must not
+        // re-stamp, and rows at/above the starting level stay "--".
+        for (uint8_t i = 0; i < BATT_NTHR; i++) {
+            uint8_t t = batt_thresholds[i];
+            if (!batt_stamps[i].set && level <= t && t < batt_last_level) batt_stamp(&batt_stamps[i]);
+        }
     }
 
     batt_last_level    = level;
     batt_last_change_s = now;
 
-    if (menu_state == MENU_ADJUST && menu_sel == MENU_ITEM_BATTERY) {
+    if (batt_screen_active()) {
         menu_draw_battery_pct();             // any change (rise or drop) moves the %
-        if (redraw) menu_draw_adjust(false);  // only a drop moves the 1%/10%/Full rows
+        if (drop) menu_draw_adjust(false);   // only a drop moves the 1% rate / list
     }
 }
 
@@ -686,6 +853,15 @@ static void menu_turn(bool clockwise) {
                 if (clockwise) rgb_matrix_increase_hue_noeeprom();
                 else           rgb_matrix_decrease_hue_noeeprom();
                 break;
+            case MENU_ITEM_BATTERY: {
+                // Scroll the 1% / L: / threshold list by item, clamped to the
+                // range that keeps the panel full.
+                uint8_t max = batt_scroll_max();
+                if (batt_scroll > max) batt_scroll = max;
+                if (clockwise) { if (batt_scroll < max) batt_scroll++; }
+                else           { if (batt_scroll > 0)   batt_scroll--; }
+                break;
+            }
         }
         menu_draw_adjust(false);
     }
@@ -721,12 +897,6 @@ bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
 void keyboard_post_init_user(void) {
     rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR);
     rgb_matrix_sethsv_noeeprom(176, 255, 128);
-
-    // Power-on also resets the Battery menu's "Last" stat, same as hitting
-    // 100% does in batt_stat_poll -- "Last" means since whichever of those
-    // two happened more recently.
-    batt_last_reset_s = rtc_get_seconds();
-    batt_last_valid   = true;
 }
 
 
