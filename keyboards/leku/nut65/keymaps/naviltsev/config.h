@@ -23,3 +23,7 @@
 #define HS_RL_DEFAULT_VAL 0
 // Front side light effect after reset: 12 = off (fork default 0 = rainbow).
 #define HS_RL_DEFAULT_MODE 12
+
+// Fn+Space: no battery gauge on keys 1..0 -- the front strip shows it instead
+// (keymap.c strip_battery()); the keys just go dark while it's held.
+#define HS_BATQ_NO_KEY_GAUGE

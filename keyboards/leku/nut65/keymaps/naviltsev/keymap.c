@@ -139,10 +139,12 @@ static void strip_fill(uint8_t from, uint8_t count, uint8_t r, uint8_t g, uint8_
     }
 }
 
-// Scales a full-brightness colour to the key backlight brightness, so every
-// strip indicator follows Fn+Up/Down the same way.
+extern uint8_t rl_rgb_brightness_val; // nut65.c: side light brightness, 8..55 for Fn+PgDn/PgUp steps 0..4
+
+// Scales a full-brightness colour to the front strip's own brightness
+// (Fn+PgUp/PgDn); every strip indicator uses it.
 static RGB strip_dim(uint8_t r, uint8_t g, uint8_t b) {
-    uint8_t val = rgb_matrix_get_val();
+    uint8_t val = rl_rgb_brightness_val;
     return (RGB){.r = (uint16_t)r * val / 255, .g = (uint16_t)g * val / 255, .b = (uint16_t)b * val / 255};
 }
 
@@ -167,8 +169,8 @@ static void strip_battery(void) {
 }
 
 // Mirrors the board's Fn+M blink on the M key (HS_RGB_BLINK_INDEX_SYS_TEM):
-// same timing and colour (blue -> Win, white -> Mac), dimmed to the key
-// backlight brightness. Returns false when that blink isn't running.
+// same timing and colour (blue -> Win, white -> Mac), dimmed to the strip
+// brightness. Returns false when that blink isn't running.
 static bool strip_os_blink(void) {
     for (uint8_t i = 0; i < RGB_MATRIX_BLINK_COUNT; i++) {
         blink_rgb_t *blink = &blink_rgbs[i];
@@ -189,7 +191,7 @@ static bool strip_os_blink(void) {
 static void strip_os_marker(void) {
     bool mac = get_highest_layer(default_layer_state) == _MBL;
     HSV  hsv = mac ? (HSV){HSV_WHITE} : (HSV){HSV_BLUE};
-    hsv.v    = rgb_matrix_get_val(); // follow the key backlight brightness
+    hsv.v    = rl_rgb_brightness_val; // follow the strip brightness (Fn+PgUp/PgDn)
     RGB rgb  = hsv_to_rgb(hsv);
 
     strip_fill(0, STRIP_MARKER_LEDS, rgb.r, rgb.g, rgb.b);
@@ -231,7 +233,7 @@ static void strip_channel(void) {
     strip_fill(CHANNEL_ZONE_FIRST, CHANNEL_ZONE_LEDS, 0x00, 0x00, 0x00);
     if (!connected && (timer_read32() / CHANNEL_BLINK_MS) % 2) return;
 
-    hsv.v   = rgb_matrix_get_val(); // follow the key backlight brightness
+    hsv.v   = rl_rgb_brightness_val; // follow the strip brightness (Fn+PgUp/PgDn)
     RGB rgb = hsv_to_rgb(hsv);
     strip_fill(CHANNEL_ZONE_FIRST + slot * (CHANNEL_SLOT_LEDS + CHANNEL_SLOT_GAP), CHANNEL_SLOT_LEDS, rgb.r, rgb.g, rgb.b);
 }

@@ -124,22 +124,28 @@ mirrors that path: `keyboards/leku/nut65/keymaps/naviltsev`.
    ```
    For an existing clone: `git submodule update --init --recursive`.
 
-2. **Apply the local changes to `keyboards/leku/nut65/nut65.c`.** There's no
+2. **Apply the local changes to the board code.** There's no
    personal fork of this one yet, so these live only in the local clone and
    have to be redone on a fresh one:
-   - At the end of the `if (!start_paoma_flag) { ... }` block in
+   - `keyboards/leku/nut65/nut65.c`: at the end of the
+     `if (!start_paoma_flag) { ... }` block in
      `rgb_matrix_indicators_advanced_kb()`, right after `query();`, add
      `rgb_matrix_indicators_advanced_user(led_min, led_max);`. The board
      never calls the user hook otherwise, and the keymap's front-strip
      indicators (battery gauge, Win/Mac, connection) depend on it.
-   - In `eeconfig_confinfo_default()`, replace the hard-coded
+   - `nut65.c`, `eeconfig_confinfo_default()`: replace the hard-coded
      `confinfo.rl_val = 4;` and `confinfo.rgb_light_mode = 0;` with
      `HS_RL_DEFAULT_VAL` and `HS_RL_DEFAULT_MODE`, each defined above the
      function under `#ifndef` with the old value as fallback. The keymap's
      `config.h` sets them (front strip: dimmest, effect off).
+   - `keyboards/leku/nut65/rgb_record/rgb_record.c`, `query()`: wrap the
+     `for (uint8_t i = 0; i < 10; i++)` loop that lights keys 1..0 for the
+     Fn+Space battery gauge in `#ifndef HS_BATQ_NO_KEY_GAUGE` / `#endif`.
+     The keymap defines it, since the front strip shows the gauge instead.
 
-   `nut65.c` isn't UTF-8 (GBK comments) -- edit it with a tool that keeps the
-   encoding (e.g. `sed`), not one that rewrites the file as UTF-8.
+   `nut65.c` and `rgb_record.c` aren't UTF-8 (GBK comments) -- edit them with
+   a tool that keeps the encoding (e.g. `sed`), not one that rewrites the
+   file as UTF-8.
 
 3. **Point QMK at this fork when building.** The `overlay_dir` link from
    above is shared, but `user.qmk_home` is a single global setting, normally
