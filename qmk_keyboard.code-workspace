@@ -8,6 +8,9 @@
 		},
 		{
 			"path": "D:/Dev/_qmk_forks/ajazz"
+		},
+		{
+			"path": "../../../../_qmk_forks/weikav"
 		}
 	],
 	"settings": {}

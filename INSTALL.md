@@ -5,7 +5,7 @@ repo (see `qmk.json`) — it holds keymaps only, not a full `qmk_firmware`
 tree. It has to be linked to an actual firmware clone via QMK CLI config
 before `qmk compile`/`qmk flash` will find anything in it. Each keyboard
 below uses a different firmware source, so the setup differs slightly per
-board; this repo (and the link step) is shared by both.
+board; this repo (and the link step) is shared by all of them.
 
 ## Ajazz AK820 Pro
 
@@ -109,3 +109,67 @@ to pull real upstream QMK's changes for reference/comparison:
 git remote add upstream https://github.com/qmk/qmk_firmware
 git fetch upstream
 ```
+
+## Weikav Nut65
+
+Firmware source is the vendor's fork, `hangshengkeji/qmk_firmware`
+(branch `master`). The board lives at **`keyboards/leku/nut65`** there, not
+`weikav/nut65` -- it's LEKU's NUT65 design -- so the keymap in this repo
+mirrors that path: `keyboards/leku/nut65/keymaps/naviltsev`.
+
+1. **Clone the vendor fork, with submodules** (ChibiOS etc. -- without them
+   the build fails with `startup_wb32fq95xx.mk: No such file or directory`):
+   ```sh
+   git clone https://github.com/hangshengkeji/qmk_firmware -b master --recurse-submodules
+   ```
+   For an existing clone: `git submodule update --init --recursive`.
+
+2. **Apply the local changes to `keyboards/leku/nut65/nut65.c`.** There's no
+   personal fork of this one yet, so these live only in the local clone and
+   have to be redone on a fresh one:
+   - At the end of the `if (!start_paoma_flag) { ... }` block in
+     `rgb_matrix_indicators_advanced_kb()`, right after `query();`, add
+     `rgb_matrix_indicators_advanced_user(led_min, led_max);`. The board
+     never calls the user hook otherwise, and the keymap's front-strip
+     indicators (battery gauge, Win/Mac, connection) depend on it.
+   - In `eeconfig_confinfo_default()`, replace the hard-coded
+     `confinfo.rl_val = 4;` and `confinfo.rgb_light_mode = 0;` with
+     `HS_RL_DEFAULT_VAL` and `HS_RL_DEFAULT_MODE`, each defined above the
+     function under `#ifndef` with the old value as fallback. The keymap's
+     `config.h` sets them (front strip: dimmest, effect off).
+
+   `nut65.c` isn't UTF-8 (GBK comments) -- edit it with a tool that keeps the
+   encoding (e.g. `sed`), not one that rewrites the file as UTF-8.
+
+3. **Point QMK at this fork when building.** The `overlay_dir` link from
+   above is shared, but `user.qmk_home` is a single global setting, normally
+   left pointing at one of the other boards' firmware, so set `QMK_HOME` per
+   command (QMK MSYS):
+   ```sh
+   QMK_HOME=/d/Dev/_qmk_forks/weikav qmk compile -kb leku/nut65 -km naviltsev
+   ```
+   Firmware lands as `leku_nut65_naviltsev.bin` in this repo's root. A change
+   to the keymap's `config.h` triggers a full rebuild (a few minutes).
+
+### Flashing
+
+QMK Toolbox works (WB32 DFU bootloader; driver `342D:DFA0` comes with QMK
+MSYS / Toolbox's *Install Drivers*).
+
+1. Connect the USB cable, in wired mode (Fn+T).
+2. Enter the bootloader:
+   - **Fn + Right Shift + Esc** (`QK_BOOT`). This also **wipes the EEPROM**,
+     so the board comes up with the defaults from the keymap's `config.h`
+     (static red keys at half brightness, front strip off/dimmest) -- use
+     this one when those defaults changed.
+   - Or hold the reset button on the PCB underside while plugging in --
+     keeps the saved settings.
+3. Flash `leku_nut65_naviltsev.bin` in QMK Toolbox.
+4. **Unplug the cable, then flip the power switch (under the Tab keycap)
+   off and on.** The board doesn't start the new firmware by itself after
+   "Flash Complete", and the switch doesn't power-cycle it while USB is
+   connected -- until then it looks bricked.
+
+Note: VIA's saved layout resets on every flash of a build from a different
+day (VIA keys its EEPROM data on the build date), so keep remaps in
+`keymap.c`, not only in VIA.

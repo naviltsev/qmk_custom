@@ -2,6 +2,7 @@
     "userspace_version": "1.0",
     "build_targets": [
         ["nuphy/kick75/ansi", "naviltsev"],
-        ["a_jazz/ak820pro", "naviltsev"]
+        ["a_jazz/ak820pro", "naviltsev"],
+        ["leku/nut65", "naviltsev"]
     ]
 }
