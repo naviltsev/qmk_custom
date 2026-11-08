@@ -68,6 +68,35 @@ static inline void battery_indicator_fkeys(uint8_t level, uint8_t led_min, uint8
     }
 }
 
+// F1-F10 as a progress bar (like the stock NuT65 gauge):
+// - each key represents 10%; rounded up, so any charge lights at least F1
+// - color is green for 7-10 keys, amber for 4-6, red for 1-3
+// - unlit keys are turned off so the bar reads clearly over any effect
+static inline void battery_indicator_f1_f10(uint8_t level, uint8_t led_min, uint8_t led_max) {
+    if (level > 100) level = 100;
+    uint8_t lit = (level + 9) / 10;  // 0-10 keys to light
+
+    RGB color;
+    if (lit <= 3) {
+        color = (RGB){0, 128, 0};  // red (GRB)
+    } else if (lit <= 6) {
+        color = (RGB){64, 128, 0}; // amber (GRB)
+    } else {
+        color = (RGB){128, 0, 0};  // green (GRB)
+    }
+
+    for (uint8_t i = 0; i < 10; i++) {
+        uint8_t led = g_led_config.matrix_co[0][i + 1];  // F1=col1 .. F10=col10
+        if (led < led_min || led >= led_max) continue;
+
+        if (i < lit) {
+            set_color_scaled(led, color.r, color.g, color.b);
+        } else {
+            set_color_scaled(led, 0, 0, 0);    // off
+        }
+    }
+}
+
 // ESC shows a rainbow color based on battery level, 7 colors:
 // red (0-10%), orange (10-20%), yellow (20-30%), green (30-40%), cyan (40-50%), blue (50-60%), purple (60-100%)
 static inline void battery_indicator_rainbow(uint8_t level, uint8_t led_min, uint8_t led_max) {

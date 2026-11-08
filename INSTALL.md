@@ -99,6 +99,11 @@ qmk compile -kb nuphy/kick75/ansi -km naviltsev
 qmk flash   -kb nuphy/kick75/ansi -km naviltsev
 ```
 
+**Entering flash mode**: there's no `QK_BOOT` key in the keymap -- use
+bootmagic. Unplug the cable, hold **Esc**, plug the cable back in, then
+let go. The board shows up as an STM32 DFU device. This **wipes the EEPROM**,
+so RGB goes back to the `config.h` defaults.
+
 ### Keeping up with real upstream QMK
 
 `nuphy-src/qmk_firmware` is a vendor fork of official QMK, not a personal

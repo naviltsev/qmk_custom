@@ -21,6 +21,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 extern DEV_INFO_STRUCT dev_info;
 
+// Fn+Space - shows the battery gauge on F1-F10 while held.
+// Placed after the agent keycodes so the two ranges never overlap.
+enum user_keycodes {
+    BAT_GAUGE = AG_LAST,
+};
+
+static bool bat_gauge_held = false;
+
 // ESC key shows a color based on the current connection:
 static void connection_indicator_led(uint8_t led_min, uint8_t led_max) {
     uint8_t esc_led = g_led_config.matrix_co[0][0];
@@ -37,6 +45,12 @@ static void connection_indicator_led(uint8_t led_min, uint8_t led_max) {
 }
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+    // Handled before the press-only filter below: release must clear the flag
+    if (keycode == BAT_GAUGE) {
+        bat_gauge_held = record->event.pressed;
+        return false;
+    }
+
     if (!record->event.pressed) return true;
 
     // Pi Agent layer macros (FN + "/" held)
@@ -83,11 +97,6 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     return true;
 }
 
-void keyboard_post_init_user(void) {
-    // Default RGB hue/sat/val - white, 1/4th brightness
-    rgb_matrix_sethsv_noeeprom(0, 0, 64);
-}
-
 // battery_percent_changed_user() documented here https://docs.qmk.fm/features/battery
 // is never called on Kick75 it looks like - it manages battery via its own
 // RF protocol (dev_info.rf_baterry), bypassing the standard QMK battery feature entirely
@@ -100,8 +109,10 @@ bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
         return false;
     }
 
-    uint8_t level = dev_info.rf_baterry;
-    battery_indicator_fkeys(level, led_min, led_max);
+    // Battery gauge on F1-F10, only while Fn+Space is held
+    if (bat_gauge_held) {
+        battery_indicator_f1_f10(dev_info.rf_baterry, led_min, led_max);
+    }
     connection_indicator_led(led_min, led_max);
     return false;
 }
@@ -123,7 +134,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 	RGB_TOG, 	_______,   	_______,   	_______,   	_______,   	_______,   	_______,   	_______,   	_______,   	_______,  	KC_UP,   	DEV_RESET,	SLEEP_MODE, BAT_SHOW,	KC_END,
 	_______,	_______,   	_______,   	_______,  	_______,   	_______,   	_______,	_______,   	_______,   	KC_LEFT,  	KC_DOWN,	KC_RGHT, 	_______,                KC_INS,
 	_______,				_______,   	_______,   	_______,  	_______,    _______,   	_______,	MO(4), 		RGB_SPD,	RGB_SPI,	_______,	_______,	RGB_VAI,
-	_______,	_______,	_______,										_______, 							_______,	MO(1),		            RGB_MOD,    RGB_VAD,	RGB_HUI),
+	_______,	_______,	_______,										BAT_GAUGE,							_______,	MO(1),		            RGB_MOD,    RGB_VAD,	RGB_HUI),
 // layer win
 [2] = LAYOUT(
 	KC_ESC, 	KC_F1,  	KC_F2,  	KC_F3, 		KC_F4,  	KC_F5,  	KC_F6,  	KC_F7,  	KC_F8,  	KC_F9, 		KC_F10, 	KC_F11, 	KC_F12, 	KC_PGUP,   KC_MUTE,
@@ -139,7 +150,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 	RGB_TOG,	_______,   	_______,   	_______,  	_______,   	_______,   	_______,   	_______,   	_______,   	_______,  	KC_UP,   	DEV_RESET,	SLEEP_MODE, BAT_SHOW,	KC_END,
 	_______,	_______,   	_______,   	_______,  	_______,   	_______,   	_______,	_______,   	_______,   	KC_LEFT,  	KC_DOWN,	KC_RGHT, 	_______,                KC_INS,
 	_______,				_______,   	_______,   	_______,  	_______,   	_______,   	_______,	MO(4), 		RGB_SPD,	RGB_SPI,	MO(_AGENT),	_______,	RGB_VAI,
-	_______,	_______,	_______,										_______, 							_______,	MO(3),					RGB_MOD,    RGB_VAD,	RGB_HUI),
+	_______,	_______,	_______,										BAT_GAUGE,							_______,	MO(3),					RGB_MOD,    RGB_VAD,	RGB_HUI),
 // layer side led fn+m
 [4] = LAYOUT(
 	_______, 	_______,  	_______,  	_______, 	_______,  	_______,  	_______,  	_______,  	_______,  	_______, 	_______, 	_______, 	_______, 	_______,	_______,

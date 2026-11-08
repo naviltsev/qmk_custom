@@ -95,13 +95,22 @@ Native pi keybindings, Windows defaults. No typing, instant.
 
 ## Battery indicator
 
-Three effects are available, controlled via `rgb_matrix_indicators_advanced_user()` in `keymap.c`:
+Hold **Fn + Space** to show battery charge on the **F1–F10** keys, like the stock
+NuT65 gauge. It works on both the Mac and Windows layers. Each key is 10%, rounded
+up, so any charge lights at least F1. Colors: red (1–3 keys), amber (4–6),
+green (7–10). Unlit keys go dark so the bar reads clearly over any effect. The
+gauge disappears as soon as you release the keys.
+
+The gauge is drawn by `battery_indicator_f1_f10()`, called from
+`rgb_matrix_indicators_advanced_user()` in `keymap.c` while the `BAT_GAUGE` key
+is held. `battery_indicator.h` keeps a few alternatives that aren't currently used:
 
 1. **battery_indicator_simple** — ESC key shows green (>=30%), orange (>=10%), or red (<10%)
 2. **battery_indicator_rainbow** — ESC key shows one of 7 colors mapped across 0-100%
-3. **battery_indicator_fkeys** — F1-F12 as a progress bar, keys lit proportionally to battery level; red (1–4 keys), amber (5–8 keys), green (9–12 keys)
+3. **battery_indicator_fkeys** — F1-F12 as a progress bar; red (1–4 keys), amber (5–8 keys), green (9–12 keys). This used to be always on, and the Fn + Space gauge replaced it.
 
-All indicator colors respect the current RGB brightness setting.
+All indicator colors respect the current RGB brightness setting, so the gauge
+isn't visible with RGB off (Fn + Tab).
 
 ## Connection indicator
 
@@ -117,17 +126,34 @@ ESC key color shows the active connection:
 
 ## RGB
 
-Default color: white (HSV 0, 0, 64 — 1/4 brightness), set via `keyboard_post_init_user()`. After an EEPROM reset the board reverts to red — reboot (turn off then on) to restore white.
+All stock QMK RGB matrix effects are enabled — the full set `keyboard.json` in
+NuPhy's fork turns on. The keymap no longer disables any of them, and has no
+custom effects of its own.
 
-Active effects (all others disabled):
+Defaults (`config.h`), applied only after an EEPROM reset — otherwise the last
+settings you chose are kept:
 
-1. **RGB_MATRIX_SOLID_COLOR** (the default one after EEPROM reset / reboot)
-2. **RGB_MATRIX_TYPING_HEATMAP**
-3. **RGB_MATRIX_SOLID_REACTIVE_SIMPLE**
-4. **RGB_MATRIX_CUSTOM_deus_ex** — black background with themed key colors:
-   - WASD — light blue
-   - F1–F2 — purple
-   - F3–F12 — green
-   - 1–0 row — orange
-   - Y — yellow
-   - B — red
+- Effect: **RGB_MATRIX_SOLID_COLOR**
+- Color: QMK default — hue 0, full saturation, i.e. **red**
+- Brightness: **64** (1/4)
+
+Nothing overrides color on boot, so effects show their real colors.
+
+| Keys | Action |
+|---|---|
+| Fn + ← | Next effect (Fn + Shift + ← — previous) |
+| Fn + ↑ / ↓ | Brightness up / down |
+| Fn + → | Hue (color) |
+| Fn + , / . | Effect speed down / up |
+| Fn + Tab | RGB on / off |
+
+Side light strip: same keys while holding **Fn + M**.
+
+### Notes
+
+- The NuPhy fork's keyboard-level `rules.mk` sets `RGB_MATRIX_CUSTOM_USER = yes`,
+  which makes the build require a `rgb_matrix_user.inc`. The keymap's `rules.mk`
+  sets it back to `no`. Remove that override if you add custom effects again.
+- There's no saturation key, so pure white isn't reachable from the keyboard
+  anymore. Earlier, `keyboard_post_init_user()` forced white (sat 0) on every
+  boot, but that made every effect white, so it was removed.
