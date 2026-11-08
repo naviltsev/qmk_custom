@@ -200,8 +200,9 @@ static void strip_os_marker(void) {
 
 // Current connection in the middle of the strip: 5 slots laid out like the
 // Fn+Q/W/E/R/T keys (BT1, BT2, BT3, 2.4G, USB), only the active one lit, in the
-// board's own channel colours (HS_LBACK_COLOR_*: BT blue, 2.4G green, USB
-// white). Blinks while not connected, steady once connected.
+// same colours as the Kick75 ESC connection LED: BT1 green, BT2 white,
+// BT3 amber, 2.4G blue, USB red. Blinks while not connected, steady once
+// connected.
 #define CHANNEL_SLOTS 5
 #define CHANNEL_SLOT_LEDS 4
 #define CHANNEL_SLOT_GAP 2
@@ -216,11 +217,13 @@ static void strip_channel(void) {
     bool    connected;
 
     switch (devs) {
-        case DEVS_BT1: slot = 0, hsv = (HSV){HSV_BLUE};  break;
-        case DEVS_BT2: slot = 1, hsv = (HSV){HSV_BLUE};  break;
-        case DEVS_BT3: slot = 2, hsv = (HSV){HSV_BLUE};  break;
-        case DEVS_2G4: slot = 3, hsv = (HSV){HSV_GREEN}; break;
-        case DEVS_USB: slot = 4, hsv = (HSV){HSV_WHITE}; break;
+        case DEVS_BT1: slot = 0, hsv = (HSV){HSV_GREEN}; break;
+        case DEVS_BT2: slot = 1, hsv = (HSV){HSV_WHITE}; break;
+        // Amber. The strip's colours shift at its low brightness: HSV_GOLD
+        // reads red at step 1 (Fn+PgDn), amber at step 2, yellowish above.
+        case DEVS_BT3: slot = 2, hsv = (HSV){HSV_GOLD};  break;
+        case DEVS_2G4: slot = 3, hsv = (HSV){HSV_BLUE};  break;
+        case DEVS_USB: slot = 4, hsv = (HSV){HSV_RED};   break;
         default: return;
     }
 

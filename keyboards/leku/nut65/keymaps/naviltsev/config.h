@@ -19,8 +19,9 @@
 #undef RGB_MATRIX_DEFAULT_VAL
 #define RGB_MATRIX_DEFAULT_VAL 80
 
-// Front side light brightness step after reset (fork default 4 = brightest).
-#define HS_RL_DEFAULT_VAL 0
+// Front side light brightness step after reset, 0..4 (fork default 4 =
+// brightest). 1 = second-dimmest, the lowest where BT3 amber reads as amber.
+#define HS_RL_DEFAULT_VAL 1
 // Front side light effect after reset: 12 = off (fork default 0 = rainbow).
 #define HS_RL_DEFAULT_MODE 12
 

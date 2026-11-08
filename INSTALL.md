@@ -142,7 +142,12 @@ mirrors that path: `keyboards/leku/nut65/keymaps/naviltsev`.
      `confinfo.rl_val = 4;` and `confinfo.rgb_light_mode = 0;` with
      `HS_RL_DEFAULT_VAL` and `HS_RL_DEFAULT_MODE`, each defined above the
      function under `#ifndef` with the old value as fallback. The keymap's
-     `config.h` sets them (front strip: dimmest, effect off).
+     `config.h` sets them (front strip: second-dimmest step, effect off).
+   - `nut65.c`, `process_record_kb()`, `case RL_VAI` / `case RL_VAD`:
+     remove `if (confinfo.rgb_light_mode == 12) return false;` from both.
+     Otherwise Fn+PgUp/PgDn does nothing while the strip effect is off, and
+     the keymap's strip indicators, which use that brightness, are stuck at
+     whatever level was last set.
    - `keyboards/leku/nut65/rgb_record/rgb_record.c`, `query()`: wrap the
      `for (uint8_t i = 0; i < 10; i++)` loop that lights keys 1..0 for the
      Fn+Space battery gauge in `#ifndef HS_BATQ_NO_KEY_GAUGE` / `#endif`.
@@ -171,8 +176,8 @@ MSYS / Toolbox's *Install Drivers*).
 2. Enter the bootloader:
    - **Fn + Right Shift + Esc** (`QK_BOOT`). This also **wipes the EEPROM**,
      so the board comes up with the defaults from the keymap's `config.h`
-     (static red keys at half brightness, front strip off/dimmest) -- use
-     this one when those defaults changed.
+     (static red keys at half brightness, front strip off at its
+     second-dimmest step) -- use this one when those defaults changed.
    - Or hold the reset button on the PCB underside while plugging in --
      keeps the saved settings.
 3. Flash `leku_nut65_naviltsev.bin` in QMK Toolbox.
