@@ -17,15 +17,18 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include QMK_KEYBOARD_H
 #include "battery_indicator.h"
-#include "agent_layer.h"
 
 extern DEV_INFO_STRUCT dev_info;
 
 // Fn+Space - shows the battery gauge on F1-F10 while held.
-// Placed after the agent keycodes so the two ranges never overlap.
+// The board's own keycodes (LNK_BLE1, SIDE_MOD, ...) start at QK_KB_0, so
+// SAFE_RANGE (QK_USER) is free.
 enum user_keycodes {
-    BAT_GAUGE = AG_LAST,
+    BAT_GAUGE = SAFE_RANGE,
 };
+
+// Layer 6 - held on Caps Lock: WASD + IJKL arrows, 1..= = F1..F12.
+#define _CUR 6
 
 static bool bat_gauge_held = false;
 
@@ -53,12 +56,11 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 
     if (!record->event.pressed) return true;
 
-    // Pi Agent layer macros (FN + "/" held)
-    if (!agent_process_record(keycode)) return false;
-
     uint8_t layer = get_highest_layer(layer_state);
     uint8_t mods  = get_mods();
 
+    // Windows-only macros: only on the plain Win base layer (no Fn/Caps
+    // overlay held), so the Caps layer's arrows don't trigger them.
     if (layer != 0 || !IS_LAYER_ON_STATE(default_layer_state, 2)) return true;
 
     // Ctrl+Alt+Right → End, Ctrl+Alt+Left → Home
@@ -101,14 +103,6 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 // is never called on Kick75 it looks like - it manages battery via its own
 // RF protocol (dev_info.rf_baterry), bypassing the standard QMK battery feature entirely
 bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
-    // On the agent layer the whole board becomes a cheat sheet, so the battery
-    // bar on F1-F12 would fight the skill row. Connection color on ESC stays.
-    if (get_highest_layer(layer_state) == _AGENT) {
-        agent_layer_leds(led_min, led_max);
-        connection_indicator_led(led_min, led_max);
-        return false;
-    }
-
     // Battery gauge on F1-F10, only while Fn+Space is held
     if (bat_gauge_held) {
         battery_indicator_f1_f10(dev_info.rf_baterry, led_min, led_max);
@@ -124,15 +118,15 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     KC_ESC, 	KC_F1,  	KC_F2,  	KC_F3, 		KC_F4,  	KC_F5,  	KC_F6,  	KC_F7,  	KC_F8,  	KC_F9, 		KC_F10, 	KC_F11, 	KC_F12, 	KC_PGUP, 	KC_MUTE,
 	KC_GRV, 	KC_1,   	KC_2,   	KC_3,  		KC_4,   	KC_5,   	KC_6,   	KC_7,   	KC_8,   	KC_9,  		KC_0,   	KC_MINS,	KC_EQL, 	KC_BSPC,	KC_PGDN,
 	KC_TAB, 	KC_Q,   	KC_W,   	KC_E,  		KC_R,   	KC_T,   	KC_Y,   	KC_U,   	KC_I,   	KC_O,  		KC_P,   	KC_LBRC,	KC_RBRC,	KC_BSLS,	KC_HOME,
-	KC_CAPS,	KC_A,   	KC_S,   	KC_D,  		KC_F,   	KC_G,   	KC_H,   	KC_J,   	KC_K,   	KC_L,  		KC_SCLN,	KC_QUOT, 	KC_ENT,                 KC_DEL,
+	MO(_CUR),	KC_A,   	KC_S,   	KC_D,  		KC_F,   	KC_G,   	KC_H,   	KC_J,   	KC_K,   	KC_L,  		KC_SCLN,	KC_QUOT, 	KC_ENT,                 KC_DEL,
 	KC_LSFT,				KC_Z,   	KC_X,   	KC_C,  		KC_V,   	KC_B,   	KC_N,   	KC_M,   	KC_COMM,	KC_DOT,		KC_SLSH,	KC_RSFT,	KC_UP,
 	KC_LCTL,	KC_LOPT,	KC_LCMD,										KC_SPC, 							KC_RCMD,	MO(1),   				KC_LEFT,	KC_DOWN,    KC_RIGHT),
 // layer Mac Fn
 [1] = LAYOUT(
 	_______, 	KC_BRID,  	KC_BRIU,  	MAC_TASK, 	MAC_SEARCH, MAC_VOICE,  MAC_DND,  	KC_MPRV,  	KC_MPLY,  	KC_MNXT, 	KC_MUTE, 	KC_VOLD, 	KC_VOLU, 	_______,    _______,
 	_______, 	LNK_BLE1,  	LNK_BLE2,  	LNK_BLE3,  	LNK_RF,   	_______,   	_______,   	_______,   	_______,   	_______,  	_______,   	_______,	_______, 	_______,	_______,
-	RGB_TOG, 	_______,   	_______,   	_______,   	_______,   	_______,   	_______,   	_______,   	_______,   	_______,  	KC_UP,   	DEV_RESET,	SLEEP_MODE, BAT_SHOW,	KC_END,
-	_______,	_______,   	_______,   	_______,  	_______,   	_______,   	_______,	_______,   	_______,   	KC_LEFT,  	KC_DOWN,	KC_RGHT, 	_______,                KC_INS,
+	RGB_TOG, 	_______,   	_______,   	_______,   	_______,   	_______,   	_______,   	_______,   	_______,   	_______,  	_______,   	DEV_RESET,	SLEEP_MODE, BAT_SHOW,	KC_END,
+	_______,	_______,   	_______,   	_______,  	_______,   	_______,   	_______,	_______,   	_______,   	_______,  	_______,	_______, 	_______,                KC_INS,
 	_______,				_______,   	_______,   	_______,  	_______,    _______,   	_______,	MO(4), 		RGB_SPD,	RGB_SPI,	_______,	_______,	RGB_VAI,
 	_______,	_______,	_______,										BAT_GAUGE,							_______,	MO(1),		            RGB_MOD,    RGB_VAD,	RGB_HUI),
 // layer win
@@ -140,16 +134,16 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 	KC_ESC, 	KC_F1,  	KC_F2,  	KC_F3, 		KC_F4,  	KC_F5,  	KC_F6,  	KC_F7,  	KC_F8,  	KC_F9, 		KC_F10, 	KC_F11, 	KC_F12, 	KC_PGUP,   KC_MUTE,
 	KC_GRV, 	KC_1,   	KC_2,   	KC_3,  		KC_4,   	KC_5,   	KC_6,   	KC_7,   	KC_8,   	KC_9,  		KC_0,   	KC_MINS,	KC_EQL, 	KC_BSPC,   KC_PGDN,
 	KC_TAB, 	KC_Q,   	KC_W,   	KC_E,  		KC_R,   	KC_T,   	KC_Y,   	KC_U,   	KC_I,   	KC_O,  		KC_P,   	KC_LBRC,	KC_RBRC,	KC_BSLS,   KC_HOME,
-	KC_CAPS,	KC_A,   	KC_S,   	KC_D,  		KC_F,   	KC_G,   	KC_H,   	KC_J,   	KC_K,   	KC_L,  		KC_SCLN,	KC_QUOT, 	KC_ENT, 	           KC_DEL,
+	MO(_CUR),	KC_A,   	KC_S,   	KC_D,  		KC_F,   	KC_G,   	KC_H,   	KC_J,   	KC_K,   	KC_L,  		KC_SCLN,	KC_QUOT, 	KC_ENT, 	           KC_DEL,
 	KC_LSFT,				KC_Z,   	KC_X,   	KC_C,  		KC_V,   	KC_B,   	KC_N,   	KC_M,   	KC_COMM,	KC_DOT,		KC_SLSH,	KC_RSFT,    KC_UP,
 	KC_LCTL,	KC_LWIN,	KC_LALT,										KC_SPC, 							KC_RALT,	MO(3),	                KC_LEFT,   	KC_DOWN,	KC_RIGHT),
 // layer win Fn
 [3] = LAYOUT(
 	_______, 	KC_BRID,  	KC_BRIU,  	_______, 	_______,  	_______,  	_______,  	KC_MPRV,  	KC_MPLY,  	KC_MNXT, 	KC_MUTE, 	KC_VOLD, 	KC_VOLU, 	_______,    _______,
 	_______, 	LNK_BLE1,  	LNK_BLE2,  	LNK_BLE3,  	LNK_RF,   	_______,   	_______,   	_______,   	_______,   	_______,  	_______,   	_______,	_______, 	_______,	_______,
-	RGB_TOG,	_______,   	_______,   	_______,  	_______,   	_______,   	_______,   	_______,   	_______,   	_______,  	KC_UP,   	DEV_RESET,	SLEEP_MODE, BAT_SHOW,	KC_END,
-	_______,	_______,   	_______,   	_______,  	_______,   	_______,   	_______,	_______,   	_______,   	KC_LEFT,  	KC_DOWN,	KC_RGHT, 	_______,                KC_INS,
-	_______,				_______,   	_______,   	_______,  	_______,   	_______,   	_______,	MO(4), 		RGB_SPD,	RGB_SPI,	MO(_AGENT),	_______,	RGB_VAI,
+	RGB_TOG,	_______,   	_______,   	_______,  	_______,   	_______,   	_______,   	_______,   	_______,   	_______,  	_______,   	DEV_RESET,	SLEEP_MODE, BAT_SHOW,	KC_END,
+	_______,	_______,   	_______,   	_______,  	_______,   	_______,   	_______,	_______,   	_______,   	_______,  	_______,	_______, 	_______,                KC_INS,
+	_______,				_______,   	_______,   	_______,  	_______,   	_______,   	_______,	MO(4), 		RGB_SPD,	RGB_SPI,	_______,	_______,	RGB_VAI,
 	_______,	_______,	_______,										BAT_GAUGE,							_______,	MO(3),					RGB_MOD,    RGB_VAD,	RGB_HUI),
 // layer side led fn+m
 [4] = LAYOUT(
@@ -159,27 +153,20 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 	_______,	_______,   	_______,   	_______,  	_______,   	_______,   	_______,	_______,   	_______,   	_______,  	_______,	_______, 	_______,                _______,
 	_______,				_______,   	_______,   	RGB_TEST,  	_______,   	_______,   	_______,	_______, 	SIDE_SPD,	SIDE_SPI,	_______,	_______,	SIDE_VAI,
 	_______,	_______,	_______,										_______, 							_______,	MO(4),   	        	SIDE_MOD,   SIDE_VAD,	SIDE_HUI),
-// layer Pi Agent - held via FN + "/"
-// Rows are color-coded while held; keys with no binding stay dark.
-[_AGENT] = LAYOUT(
-    // skills - cyan
-    _______,        AG_BRAINSTORM,  AG_WRITE_PLAN,  AG_EXEC_PLAN,   AG_DEBUG_SYS,   AG_TDD,         AG_REQ_REVIEW,  AG_RECV_REVIEW, AG_VERIFY,      AG_WORKTREES,   AG_PARALLEL,    AG_COUNCIL,     AG_PONYTAIL,    _______,        _______,
-    // session ops - green
-    _______,        AG_NEW,         AG_RESUME,      AG_FORK,        AG_TREE,        AG_COMPACT,     AG_NAME,        AG_SHARE,       AG_EXPORT,      AG_COPY,        AG_RELOAD,      AG_SETTINGS,    AG_SCOPED,      _______,        _______,
-    // prompt templates - magenta. Add ~/.pi/agent/prompts/<name>.md, then bind
-    // a key here to send the command via a new AG_* keycode in agent_layer.h.
-    XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,        XXXXXXX,
-    // mode chords - amber. Native pi keybindings, Windows defaults.
-    XXXXXXX,        LCTL(LALT(KC_P)), LSFT(KC_TAB), LCTL(KC_L),     LCTL(KC_P),     LALT(KC_P),     LCTL(KC_T),     LCTL(KC_O),     LCTL(KC_Q),     LALT(KC_Q),     LCTL(KC_X),     LCTL(KC_G),     XXXXXXX,                        XXXXXXX,
-    // transcript nav - blue
-    _______,                        LCTL(KC_UP),    LCTL(KC_DOWN),  LCTL(KC_F),     LALT(KC_V),     LCTL(KC_Z),     AG_THINKING,    AG_MODEL,       AG_LLAMA,       AG_DBG,         _______,        XXXXXXX,        _______,
-    _______,        _______,        _______,                                        _______,                                        _______,        _______,                        _______,        _______,        _______),
 // layer reserved
-[6] = LAYOUT(
+[5] = LAYOUT(
+    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,
+    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,
+    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,
+    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,                _______,
+    _______,                _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,    _______,
+    _______,    _______,    _______,                                        _______,                            _______,    _______,                _______,    _______,    _______),
+// layer Caps Lock held, from either base layer: WASD + IJKL arrows, 1..= = F1..F12
+[_CUR] = LAYOUT(
 	_______, 	_______,  	_______,  	_______, 	_______,  	_______,  	_______,  	_______,  	_______,  	_______, 	_______, 	_______, 	_______, 	_______,	_______,
-	_______, 	_______,   	_______,   	_______,  	_______,   	_______,   	_______,   	_______,   	_______,   	_______,  	_______,   	_______,	_______, 	_______,	_______,
-	_______, 	_______,  	_______,  	_______,  	_______,   	_______,   	_______,   	_______,   	_______,   	_______,  	_______,   	_______,	_______, 	_______,	_______,
-	_______,	_______,   	_______,   	_______,  	_______,   	_______,   	_______,	_______,   	_______,   	_______,  	_______,	_______, 	_______,                _______,
+	_______, 	KC_F1,   	KC_F2,   	KC_F3,  	KC_F4,   	KC_F5,   	KC_F6,   	KC_F7,   	KC_F8,   	KC_F9,  	KC_F10,   	KC_F11,		KC_F12, 	_______,	_______,
+	_______, 	_______,  	KC_UP,  	_______,  	_______,   	_______,   	_______,   	_______,   	KC_UP,   	_______,  	_______,   	_______,	_______, 	_______,	_______,
+	_______,	KC_LEFT,   	KC_DOWN,   	KC_RGHT,  	_______,   	_______,   	_______,	KC_LEFT,   	KC_DOWN,   	KC_RGHT,  	_______,	_______, 	_______,                _______,
 	_______,				_______,   	_______,   	_______,  	_______,   	_______,   	_______,	_______, 	_______,	_______,	_______,	_______,	_______,
 	_______,	_______,	_______,										_______, 							_______,	_______,			    _______,    _______,    _______),
 [7] = LAYOUT(

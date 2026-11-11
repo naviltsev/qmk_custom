@@ -1,10 +1,98 @@
-# NuPhy Kick75 — custom keymap
+# Custom QMK keymaps
 
-## General
+Keymaps for three keyboards, all under the `naviltsev` keymap name:
+
+| Keyboard | Keymap |
+|---|---|
+| Ajazz AK820 Pro | `keyboards/a_jazz/ak820pro/keymaps/naviltsev` |
+| NuPhy Kick75 | `keyboards/nuphy/kick75/ansi/keymaps/naviltsev` |
+| Weikav Nut65 | `keyboards/leku/nut65/keymaps/naviltsev` |
+
+Build and flash setup for each board is in [INSTALL.md](INSTALL.md).
+
+## Shared across all keyboards
+
+### Caps Lock layer
+
+Caps Lock is not Caps Lock. Holding it turns on a cursor layer, from both the
+Mac and Windows base layers. Keys not listed here type what they normally do.
+
+| Keys (Caps held) | Output |
+|---|---|
+| W / A / S / D | ↑ / ← / ↓ / → |
+| I / J / K / L | ↑ / ← / ↓ / → |
+| 1 … 0, `-`, `=` | F1 … F12 |
+| Esc | `` ` `` — **Nut65 only**, which has Esc where the other boards have `` ` `` |
+
+There is no key that turns Caps Lock itself on.
+
+### Windows layer macros (no Fn)
+
+Only on the Windows base layer, and only with nothing else held: no Fn, no Caps.
+So they work with the real arrow keys, not with the Caps layer arrows.
+
+| Combo | Output | Description |
+|---|---|---|
+| Ctrl+Alt+Right | End | |
+| Ctrl+Alt+Left | Home | |
+| Ctrl+Alt+Shift+Right / Left | Shift+End / Shift+Home | Select to end / start of line |
+| Ctrl+Alt+[ | Ctrl+Shift+Tab | Previous tab in VSCode, browser, terminal, etc. |
+| Ctrl+Alt+] | Ctrl+Tab | Next tab in VSCode, browser, terminal, etc. |
+
+On the Nut65, `nut65.c` already defines `process_record_user()`, so these
+macros live in `pre_process_record_user()` there instead.
+
+## Ajazz AK820 Pro
+
+- Win/Mac is picked with the hardware switch, not a key.
+- The knob drives an on-screen settings menu: turning it opens Volume, holding
+  the knob opens the menu list (Volume, Effect, Brightness, Hue, Stats, Battery,
+  Exit). A quick press is mute while the menu is closed.
+- RGB boots into solid color every time, whatever the menu last set.
+- Layers: WINBASE, WINFN, MACBASE, MACFN, CURSOR (Caps), MENU. MENU is switched
+  on by the knob, not held, and must stay the highest layer.
+
+## Weikav Nut65
+
+- Default backlight: static red at half brightness; front strip effect off at
+  the second-dimmest step. Applied only after an EEPROM reset.
+- Needs a few local changes to the vendor's board code — see
+  [INSTALL.md](INSTALL.md).
+
+### Front LED strip
+
+The 80-LED strip along the front edge works as the indicator panel (it plays the
+Kick75's ESC-key role, in the same colors).
+
+**Connection indicator** — the middle of the strip has 5 small slots, laid out
+left to right like the Fn + Q / W / E / R / T keys that select them. Only the
+active connection's slot lights:
+
+| Slot | Connection | Color |
+|---|---|---|
+| 1 | BT1 | Green |
+| 2 | BT2 | White |
+| 3 | BT3 | Amber |
+| 4 | 2.4G (dongle) | Blue |
+| 5 | USB | Red |
+
+The slot blinks while not connected and stays steady once connected.
+
+**Win/Mac marker** — 3 LEDs at each end of the strip: blue on Windows, white on
+Mac. After Fn + M switches the OS, the whole strip blinks along with the M key.
+
+**Battery** — hold Fn + Space (wireless only) to show charge across the whole
+strip: green (≥50%), orange (≥25%), red (below). The number-row gauge the
+board shows by default is turned off, so the keys just go dark while it's held.
+
+Everything on the strip follows its own brightness (Fn + PgUp / PgDn). The rest
+of the strip keeps the board's side-light effect, which is off by default.
+
+## NuPhy Kick75
+
+### General
 
 - Debounce: 15ms (default is 0ms) — should fix double-typing issue (?)
-
-## Keymap
 
 ### All layers
 - remapped DEL/HOME/PGUP/PGDN to PGUP/PGDN/HOME/DEL;
@@ -13,90 +101,13 @@
 - F1–F12 are functional keys, no FN required;
 - multimedia controls (of F1-F12 keys - brightness, playback, etc.) require FN held;
 
-### Windows layer macros (layer 2, no FN)
+### Fn layer
 
-| Combo | Output | Description |
-|---|---|---|
-| Ctrl+Alt+Right | End | |
-| Ctrl+Alt+Left | Home | |
-| Ctrl+Alt+[ | Ctrl+Shift+Tab | Previous tab in VSCode, browser, terminal, etc. |
-| Ctrl+Alt+] | Ctrl+Tab | Next tab in VSCode, browser, terminal, etc. |
+The stock Fn + P / L / ; / ' arrows are removed — use the Caps layer instead.
 
-## Pi Agent layer (layer 5)
+### Battery indicator
 
-Held via **FN + `/`** (`MO(_AGENT)` sits in the Windows Fn layer). Windows only for
-now — add the same `MO(_AGENT)` at `/` in layer 1 to get it in Mac mode.
-
-While held, the board repaints itself as its own cheat sheet: each row gets a color,
-and a key with no binding stays dark. ESC keeps the connection-color indicator and
-still acts as pi's interrupt.
-
-### F1–F12 — skills (cyan)
-
-Types the `/skill:` command with a trailing space and stops - skills take your
-request as an argument, so the cursor is left ready for you to type it.
-
-| Key | Skill | Key | Skill |
-|---|---|---|---|
-| F1 | brainstorming | F7 | receiving-code-review |
-| F2 | writing-plans | F8 | verification-before-completion |
-| F3 | executing-plans | F9 | using-git-worktrees |
-| F4 | systematic-debugging | F10 | dispatching-parallel-agents |
-| F5 | test-driven-development | F11 | council-mode |
-| F6 | requesting-code-review | F12 | ponytail-review |
-
-### Number row — session ops (green)
-
-| Key | Command | Key | Command |
-|---|---|---|---|
-| 1 | `/new` | 7 | `/share` |
-| 2 | `/resume` | 8 | `/export` |
-| 3 | `/fork` | 9 | `/copy` |
-| 4 | `/tree` | 0 | `/reload` |
-| 5 | `/compact` | `-` | `/settings` |
-| 6 | `/name ` (no Enter — takes an argument) | `=` | `/scoped-models` |
-
-### QWERTY row — prompt templates (magenta)
-
-Empty by design. Add `~/.pi/agent/prompts/<name>.md`, then bind a key here — the
-prompt text lives in a file you can edit without reflashing.
-
-### Home row — mode chords (amber)
-
-Native pi keybindings, Windows defaults. No typing, instant.
-
-| Key | Action | Key | Action |
-|---|---|---|---|
-| A | toggle plan mode (`ctrl+alt+p`) | H | collapse thinking blocks (`ctrl+t`) |
-| S | cycle thinking level (`shift+tab`) | J | collapse tool output (`ctrl+o`) |
-| D | model selector (`ctrl+l`) | K | queue follow-up (`ctrl+q`) |
-| F | next model (`ctrl+p`) | L | dequeue (`alt+q`) |
-| G | previous model (`alt+p`) | `;` | copy last reply (`ctrl+x`) |
-| | | `'` | external editor (`ctrl+g`) |
-
-### ZXCV row — transcript (blue)
-
-| Key | Action | Key | Action |
-|---|---|---|---|
-| Z | previous prompt (`ctrl+up`) | N | `/thinking` |
-| X | next prompt (`ctrl+down`) | M | `/model` |
-| C | search transcript (`ctrl+f`) | `,` | `/llama` |
-| V | paste image (`alt+v`) | `.` | `/debug` |
-| B | undo edit (`ctrl+z`) | | |
-
-### Notes
-
-- `A` needs the plan-mode extension installed at `~/.pi/agent/extensions/plan-mode/`
-  (copy `examples/extensions/plan-mode/` from the pi package). Without it the key
-  is a no-op.
-- Holding FN + `/` occupies the right hand, so the layer is a left-hand instrument:
-  F1–F7, 1–6, QWERT, ASDFG and ZXCVB are comfortable; the right half is a stretch.
-
-
-## Battery indicator
-
-Hold **Fn + Space** to show battery charge on the **F1–F10** keys, like the stock
-NuT65 gauge. It works on both the Mac and Windows layers. Each key is 10%, rounded
+Hold **Fn + Space** to show battery charge on the **F1–F10** keys. It works on both the Mac and Windows layers. Each key is 10%, rounded
 up, so any charge lights at least F1. Colors: red (1–3 keys), amber (4–6),
 green (7–10). Unlit keys go dark so the bar reads clearly over any effect. The
 gauge disappears as soon as you release the keys.
@@ -112,7 +123,7 @@ is held. `battery_indicator.h` keeps a few alternatives that aren't currently us
 All indicator colors respect the current RGB brightness setting, so the gauge
 isn't visible with RGB off (Fn + Tab).
 
-## Connection indicator
+### Connection indicator
 
 ESC key color shows the active connection:
 
@@ -124,7 +135,7 @@ ESC key color shows the active connection:
 | RF (2.4GHz dongle) | Blue |
 | USB | Red |
 
-## RGB
+### RGB
 
 All stock QMK RGB matrix effects are enabled — the full set `keyboard.json` in
 NuPhy's fork turns on. The keymap no longer disables any of them, and has no
@@ -149,7 +160,7 @@ Nothing overrides color on boot, so effects show their real colors.
 
 Side light strip: same keys while holding **Fn + M**.
 
-### Notes
+#### Notes
 
 - The NuPhy fork's keyboard-level `rules.mk` sets `RGB_MATRIX_CUSTOM_USER = yes`,
   which makes the build require a `rgb_matrix_user.inc`. The keymap's `rules.mk`

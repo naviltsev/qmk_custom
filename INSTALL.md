@@ -46,10 +46,55 @@ and `host/doom-stream/SPEC.md` in this repo for what's been added.
    repos (`fpb/time-util-ak820pro`, `ozkl/doomgeneric`), which are separate
    clones, unrelated to the QMK firmware setup above.
 
-Once set up:
+### Building
+
+In QMK MSYS, `cd` into the fork first -- QMK CLI uses the firmware tree it's
+run from -- and check which tree it picked:
 ```sh
+cd /d/Dev/_qmk_forks/ajazz
+qmk env QMK_HOME        # should print the ajazz fork's path
 qmk compile -kb a_jazz/ak820pro -km naviltsev
-qmk flash   -kb a_jazz/ak820pro -km naviltsev
+```
+Firmware lands as `a_jazz_ak820pro_naviltsev.bin` in two places: the fork's
+root and this repo's root (the build copies it to both). A change to the
+keymap's `config.h` triggers a full rebuild (a few minutes).
+
+### Flashing
+
+With [SonixFlasher](https://github.com/SonixQMK/SonixFlasher), run directly
+-- not `qmk flash`, which expects `sonixflasher` on the PATH. The binary
+lives next to the forks, at `/d/Dev/_qmk_forks/sonixflasher.exe`.
+
+1. Connect the USB cable and set the connection switch on the bottom of the
+   board to **USB** (wired mode).
+2. Start the flash, from the fork's root (where the `.bin` is):
+   ```sh
+   cd /d/Dev/_qmk_forks/ajazz
+   ../sonixflasher.exe --vidpid 0c45/7140 --file a_jazz_ak820pro_naviltsev.bin
+   ```
+   `0c45/7140` is the SN32 bootloader's USB ID. While the board isn't in the
+   bootloader yet, it prints *"Device failed to open, re-trying in 3
+   seconds"* -- up to 5 attempts, so ~15 seconds to do step 3.
+3. Once sonixflasher is running and retrying, enter the bootloader:
+   **Fn + Esc** (`QK_BOOT`). It picks the board up on its next attempt.
+4. It erases, flashes and verifies, then ends with *"Device succesfully
+   flashed!"* / *"Flashing done. Rebooting."* -- the board restarts into the
+   new firmware by itself.
+
+A *"Device failed to init, re-trying"* line right after *"Updating Code
+Option Table"* is normal; it re-checks and carries on.
+
+### Setting the clock
+
+The dashboard clock is set from the PC with `ak820ctl` (from
+[fpb/time-util-ak820pro](https://github.com/fpb/time-util-ak820pro), cloned
+to `/d/Dev/src/github.com/fpb/time-util-ak820pro`). It sends the PC's current
+local time to the board over raw HID, so the board needs to be connected by
+USB:
+```sh
+cd /d/Dev/src/github.com/fpb/time-util-ak820pro
+./ak820ctl.exe clock
+# clock set to 2026-11-11 14:04:46
 ```
 
 ### Keeping up with `fpb`'s upstream changes
@@ -93,16 +138,35 @@ as-is, just with a keymap layered on top via the userspace link.
 4. **Toolchain**: same QMK build environment as above; no additional
    host-side tooling for this board.
 
-Once set up:
-```sh
-qmk compile -kb nuphy/kick75/ansi -km naviltsev
-qmk flash   -kb nuphy/kick75/ansi -km naviltsev
-```
+### Building + flashing (one command)
 
-**Entering flash mode**: there's no `QK_BOOT` key in the keymap -- use
-bootmagic. Unplug the cable, hold **Esc**, plug the cable back in, then
-let go. The board shows up as an STM32 DFU device. This **wipes the EEPROM**,
-so RGB goes back to the `config.h` defaults.
+STM32 DFU bootloader, flashed with `dfu-util` (comes with QMK MSYS). There's
+no `QK_BOOT` key in the keymap -- the bootloader is entered with bootmagic
+(hold Esc while plugging in), which also **wipes the EEPROM**, so RGB goes
+back to the `config.h` defaults.
+
+1. In QMK MSYS, from the fork, run:
+   ```sh
+   cd /d/Dev/_qmk_forks/nuphy
+   qmk env QMK_HOME        # should print the nuphy fork's path
+   qmk flash -kb nuphy/kick75/ansi -km naviltsev
+   ```
+   It builds first (same output as `qmk compile`; the `.bin` is copied to
+   both the fork's root and this repo's root), then prints *"Bootloader not
+   found ... Trying again every 0.5s"* while it waits. The board can stay on
+   wireless, with the cable unplugged, until now.
+2. Set the mode toggle on the back of the board to **wired**.
+3. Hold **Esc**, plug in the USB cable while still holding it, and release
+   Esc once the flash starts.
+4. It ends with *"File downloaded successfully"* / *"Submitting leave
+   request..."* -- the board leaves the bootloader and starts the new
+   firmware by itself.
+
+A *"dfuERROR ... Device's firmware is corrupt"* line right after the device
+opens is normal: it's just the bootloader's status from being forced into
+DFU, and dfu-util clears it and carries on.
+
+To build without flashing: `qmk compile -kb nuphy/kick75/ansi -km naviltsev`.
 
 ### Keeping up with real upstream QMK
 
@@ -159,32 +223,61 @@ mirrors that path: `keyboards/leku/nut65/keymaps/naviltsev`.
 
 3. **Point QMK at this fork when building.** The `overlay_dir` link from
    above is shared, but `user.qmk_home` is a single global setting, normally
-   left pointing at one of the other boards' firmware, so set `QMK_HOME` per
-   command (QMK MSYS):
+   left pointing at one of the other boards' firmware. In QMK MSYS, `cd` into
+   the fork first -- QMK CLI uses the firmware tree it's run from -- and check
+   which tree it picked before compiling:
+   ```sh
+   cd /d/Dev/_qmk_forks/weikav
+   qmk env QMK_HOME        # should print the weikav fork's path
+   qmk compile -kb leku/nut65 -km naviltsev
+   ```
+   Or, from anywhere, set it for a single command:
    ```sh
    QMK_HOME=/d/Dev/_qmk_forks/weikav qmk compile -kb leku/nut65 -km naviltsev
    ```
-   Firmware lands as `leku_nut65_naviltsev.bin` in this repo's root. A change
+   Firmware lands as `leku_nut65_naviltsev.bin` in two places: the fork's
+   root and this repo's root (the build copies it to both). A change
    to the keymap's `config.h` triggers a full rebuild (a few minutes).
 
 ### Flashing
 
-QMK Toolbox works (WB32 DFU bootloader; driver `342D:DFA0` comes with QMK
-MSYS / Toolbox's *Install Drivers*).
+WB32 DFU bootloader, USB ID `342D:DFA0`; the driver comes with QMK MSYS.
+Entering the bootloader with **Fn + Right Shift + Esc** (`QK_BOOT`) also
+**wipes the EEPROM**, so the board comes up with the defaults from the
+keymap's `config.h` (static red keys at half brightness, front strip off at
+its second-dimmest step).
 
-1. Connect the USB cable, in wired mode (Fn+T).
-2. Enter the bootloader:
-   - **Fn + Right Shift + Esc** (`QK_BOOT`). This also **wipes the EEPROM**,
-     so the board comes up with the defaults from the keymap's `config.h`
-     (static red keys at half brightness, front strip off at its
-     second-dimmest step) -- use this one when those defaults changed.
-   - Or hold the reset button on the PCB underside while plugging in --
-     keeps the saved settings.
-3. Flash `leku_nut65_naviltsev.bin` in QMK Toolbox.
-4. **Unplug the cable, then flip the power switch (under the Tab keycap)
-   off and on.** The board doesn't start the new firmware by itself after
-   "Flash Complete", and the switch doesn't power-cycle it while USB is
-   connected -- until then it looks bricked.
+#### Option A: build + flash in one command (recommended)
+
+1. From the fork, run:
+   ```sh
+   cd /d/Dev/_qmk_forks/weikav
+   qmk flash -kb leku/nut65 -km naviltsev
+   ```
+   It builds first (same output as `qmk compile`), then prints *"Bootloader
+   not found"* / *"Not found device!"* every 0.5s while it waits. The board
+   can stay on wireless until now.
+2. Connect the USB cable and switch to wired mode (**Fn + T**).
+3. Press **Fn + Right Shift + Esc**. The flash starts on its own, ends with
+   *"Download completed!"*, then *"Reset device completed!"* -- the board
+   restarts into the new firmware by itself. Nothing else to do.
+
+#### Option B: build, then flash the file
+
+1. Build with `qmk compile` (step 3 above).
+2. Flash the `.bin`, from either directory that holds it:
+   ```sh
+   cd /d/Dev/_qmk_forks/weikav
+   qmk flash leku_nut65_naviltsev.bin
+   ```
+   Given a file, it only flashes -- no build. It prints *"Please reset your
+   keyboard into bootloader mode now!"* and waits.
+3. Connect the USB cable, **Fn + T**, then **Fn + Right Shift + Esc**. It
+   ends with *"Download completed!"*.
+4. **This route doesn't reset the board afterwards: unplug the cable first,
+   then flip the power switch (under the Tab keycap) off and on.** The
+   switch doesn't power-cycle it while USB is connected -- until then it
+   looks bricked.
 
 Note: VIA's saved layout resets on every flash of a build from a different
 day (VIA keys its EEPROM data on the build date), so keep remaps in

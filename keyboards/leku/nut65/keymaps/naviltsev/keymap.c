@@ -19,7 +19,7 @@ enum layers {
     _MBL,
     _MFL,
     _DEFA,
-    _CUR, // held on Caps Lock: WASD arrows, Esc = `, 1..= = F1..F12
+    _CUR, // held on Caps Lock: WASD + IJKL arrows, Esc = `, 1..= = F1..F12
 };
 
 // clang-format off
@@ -71,8 +71,8 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
     [_CUR] = LAYOUT(  /* Caps Lock held, from either base layer; F-row same as Fn */
         KC_GRV,   KC_F1,      KC_F2,      KC_F3,    KC_F4,    KC_F5,    KC_F6,    KC_F7,    KC_F8,    KC_F9,    KC_F10,     KC_F11,   KC_F12,   _______,   _______,
-        _______,  _______,    KC_UP,      _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,    _______,  _______,  _______,   _______,
-        _______,  KC_LEFT,    KC_DOWN,    KC_RGHT,  _______,  _______,  _______,  _______,  _______,  _______,  _______,    _______,            _______,   _______,
+        _______,  _______,    KC_UP,      _______,  _______,  _______,  _______,  _______,  KC_UP,    _______,  _______,    _______,  _______,  _______,   _______,
+        _______,  KC_LEFT,    KC_DOWN,    KC_RGHT,  _______,  _______,  _______,  KC_LEFT,  KC_DOWN,  KC_RGHT,  _______,    _______,            _______,   _______,
         _______,              _______,    _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,    _______,  _______,  _______,   _______,
         _______,  _______,    _______,                        _______,                                          _______,    _______,  _______,  _______,   _______,
         KC_NO,    KC_NO,      KC_NO,      KC_NO,    KC_NO,    KC_NO,    KC_NO,    KC_NO,    KC_NO,    KC_NO,    KC_NO,      KC_NO,    KC_NO,    KC_NO,     KC_NO
@@ -109,6 +109,56 @@ const uint16_t PROGMEM rgbrec_default_effects[RGBREC_CHANNEL_NUM][MATRIX_ROWS][M
         ),
 };
 // clang-format on
+
+// ---------------------------------------------------------------------------
+// Windows-only macros, same as the AK820 Pro and Kick75 keymaps. Only fire on
+// the plain Win base layer (no Fn/Caps overlay held).
+//
+// nut65.c defines process_record_user() itself (not weak), so this lives in
+// pre_process_record_user() instead; returning false there drops the event
+// before any further processing. Skipped while the board's RGB recorder runs,
+// since that captures key presses through process_record_user().
+// ---------------------------------------------------------------------------
+bool pre_process_record_user(uint16_t keycode, keyrecord_t *record) {
+    if (!record->event.pressed || rgbrec_is_started()) return true;
+    if (!IS_LAYER_ON_STATE(default_layer_state, _BL) || get_highest_layer(layer_state) != _BL) return true;
+
+    uint8_t mods = get_mods();
+    if (!((mods & MOD_MASK_ALT) && (mods & MOD_MASK_CTRL))) return true;
+
+    // Ctrl+Alt+Right → End, Ctrl+Alt+Left → Home
+    // Ctrl+Alt+Shift+Right → Shift+End, Ctrl+Alt+Shift+Left → Shift+Home
+    if (keycode == KC_RGHT || keycode == KC_LEFT) {
+        // Save Ctrl+Alt and remove them from pressed keys
+        uint8_t held = mods & (MOD_MASK_ALT | MOD_MASK_CTRL);
+        del_mods(held);
+
+        // Tap Home or End (Shift stays held if pressed, giving selection)
+        tap_code(keycode == KC_RGHT ? KC_END : KC_HOME);
+
+        // Restore Ctrl+Alt
+        add_mods(held);
+        return false;
+    }
+
+    // Ctrl+Alt+[ → Ctrl+Shift+Tab, Ctrl+Alt+] → Ctrl+Tab
+    if (keycode == KC_LBRC || keycode == KC_RBRC) {
+        // Save Alt and remove it (keep Ctrl held)
+        uint8_t held_alt = mods & MOD_MASK_ALT;
+        del_mods(held_alt);
+
+        // Add Shift for "[" (Ctrl+Shift+Tab), leave it off for "]" (Ctrl+Tab)
+        if (keycode == KC_LBRC) register_code(KC_LSFT);
+        tap_code(KC_TAB);
+        if (keycode == KC_LBRC) unregister_code(KC_LSFT);
+
+        // Restore Alt
+        add_mods(held_alt);
+        return false;
+    }
+
+    return true;
+}
 
 // ---------------------------------------------------------------------------
 // Front LED strip

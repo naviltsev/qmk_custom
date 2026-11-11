@@ -1,7 +1,7 @@
 #pragma once
 
 // VIA defaults this to 4 (set by generated info_config.h); we added a 5th
-// layer (CURSOR), a 6th (_AGENT, the Pi Agent cheat-sheet layer), and a 7th
+// layer (CURSOR, held on Caps Lock) and a 6th
 // (MENU, for the on-device settings menu -- its own persistent layer so the
 // encoder resolves to menu-aware keycodes regardless of whether Fn is still
 // held, since ENCODER_MAP_ENABLE resolves turns from
@@ -11,11 +11,11 @@
 #ifdef DYNAMIC_KEYMAP_LAYER_COUNT
 #    undef DYNAMIC_KEYMAP_LAYER_COUNT
 #endif
-#define DYNAMIC_KEYMAP_LAYER_COUNT 7
+#define DYNAMIC_KEYMAP_LAYER_COUNT 6
 
 // The 5th layer no longer fit in the default 1KB emulated EEPROM (4 layers
 // at MATRIX_ROWS*MATRIX_COLS*2 = 180 bytes each barely fit already). Firmware
 // only uses ~75KB of the 256KB flash budget, so double the wear-leveling
 // backing store (-> 2KB logical) for headroom. Plenty of room left for the
-// 6th/7th layers too (~184 bytes each).
+// 6th layer too (~184 bytes).
 #define WEAR_LEVELING_BACKING_SIZE 4096
